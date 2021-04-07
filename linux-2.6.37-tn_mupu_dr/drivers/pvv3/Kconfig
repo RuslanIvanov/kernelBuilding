@@ -1,0 +1,21 @@
+menuconfig UPUM6_DPU_TEST
+       bool "UPUM6 PVV3 DPU_TEST support"
+
+if UPUM6_DPU_TEST
+
+config UPUPVV
+        bool "Platform  PVV support"
+        default y
+        help
+	        Include platform dependences for UPUM6 PVV
+
+config PVV3_DRIVER
+        tristate "Driver PVV3"
+        default m
+        help
+                This is driver for UPU_M6. The driver of the I/O.
+                Say Y here if you have a PVV3_DRIVER (DPU only) in your system.
+
+                To compile this driver as a module, choose M here: the
+                module will be called psmouse.
+endif

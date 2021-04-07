@@ -1,0 +1,21 @@
+menuconfig UPUM7_485_TEST
+       bool "UPUM7 PVV5 DPU_485_TEST support"
+
+if UPUM7_485_TEST
+
+config UPUPVV
+        bool "Platform  PVV support"
+        default y
+        help
+	        Include platform dependences for UPUM7 PVV
+
+config PVV5_DRIVER
+        tristate "Driver PVV5"
+        default m
+        help
+                This is driver for UPU_M7. The driver of the I/O.
+                Say Y here if you have a PVV5_DRIVER (DPU only) in your system.
+
+                To compile this driver as a module, choose M here: the
+                module will be called psmouse.
+endif

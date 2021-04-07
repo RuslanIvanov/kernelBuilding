@@ -1,0 +1,53 @@
+menuconfig Driver_SA_KSD_PVV
+	bool  "Driver SA KSD PVV"
+	help
+	  This is driver for UPU_M6. The driver of the I/O. 
+
+if Driver_SA_KSD_PVV
+
+config PVV_DRIVER
+	tristate "Driver PVV" 
+        default y
+        help
+	Say Y here if you have a PVV_DRIVER in your system.
+
+	To compile this driver as a module, choose M here: the
+	module will be called psmouse.
+
+endif
+
+menuconfig Driver_SA_KSD_PVV1
+        bool  "Driver SA KSD PVV1"
+        help
+          This is driver for UPU_M6. The driver of the I/O.
+
+if Driver_SA_KSD_PVV1
+
+config PVV1_DRIVER
+        tristate "Driver PVV1"
+        default y
+        help
+        Say Y here if you have a PVV1_DRIVER in your system.
+
+        To compile this driver as a module, choose M here: the
+        module will be called psmouse.
+
+endif
+
+menuconfig Driver_SA_KSD_PVV2
+        bool  "Driver SA KSD PVV2"
+        help
+          This is driver for UPU_M6. The driver of the I/O.
+
+if Driver_SA_KSD_PVV2
+
+config PVV2_DRIVER
+        tristate "Driver PVV2"
+        default y
+        help
+        Say Y here if you have a PVV1_DRIVER in your system.
+
+        To compile this driver as a module, choose M here: the
+        module will be called psmouse.
+
+endif

@@ -1,0 +1,43 @@
+menuconfig UPUM6
+       bool "UPUM6 PVV support"
+
+if UPUM6
+
+config UPUPVV
+        bool "Platform  PVV support"
+        default y
+        help
+	        Include platform dependences for UPUM6 PVV
+
+
+config PVV_DRIVER
+	tristate "Driver PVV" 
+        default y
+        help
+		This is driver for UPU_M6. The driver of the I/O.
+		Say Y here if you have a PVV_DRIVER in your system.
+
+		To compile this driver as a module, choose M here: the
+		module will be called psmouse.
+
+config PVV1_DRIVER
+        tristate "Driver PVV1"
+        default y
+        help
+		This is driver for UPU_M6. The driver of the I/O.
+        	Say Y here if you have a PVV1_DRIVER in your system.
+
+	        To compile this driver as a module, choose M here: the
+        	module will be called psmouse.
+
+config PVV2_DRIVER
+        tristate "Driver PVV2"
+        default y
+        help
+		This is driver for UPU_M6. The driver of the I/O.
+        	Say Y here if you have a PVV1_DRIVER in your system.
+
+	        To compile this driver as a module, choose M here: the
+        	module will be called psmouse.
+
+endif
