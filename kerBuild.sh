@@ -69,6 +69,18 @@ tam3517_upum6)
 	sleep 5
 ;;
 
+tam3517_upum6Timer)
+	defconfig=tam3517_upum6Timer_defconfig
+        echo "usage tam3517_upum6Timer_defconfig"
+        sleep 5
+;;
+
+no_config)
+        echo "no configure"
+	defconfig=""
+        sleep 5
+;;
+
 *)
 	echo "Config file is unknown"
     exit

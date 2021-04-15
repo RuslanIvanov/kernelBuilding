@@ -124,3 +124,4 @@ obj-$(CONFIG_PVV2_DRIVER)       += pvv/
 obj-$(CONFIG_PVV3_DRIVER)       += pvv3/
 obj-$(CONFIG_PVV4_DRIVER)       += pvv4/
 obj-$(CONFIG_PVV5_DRIVER)       += pvv5/
+obj-$(CONFIG_MULTI_HR_TIMER_DRIVER)     += chstime_hr_n/

@@ -1,0 +1,16 @@
+menuconfig KERNEL_TIMERS
+       bool "TIMERS support"
+
+if KERNEL_TIMERS
+
+config MULTI_HR_TIMER_DRIVER
+	tristate "Multi HR timer" 
+        default y
+        help
+		This is driver for kernel multi HR timer. The driver of the I/O.
+		Say Y here if you have a MULTI_HR_TIMER_DRIVER in your system.
+
+		To compile this driver as a module, choose M here: the
+		module will be called psmouse.
+
+endif

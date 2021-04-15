@@ -37,7 +37,7 @@
 #include "mod_pvv.h"
 #include "ioctl_pvv1.h"
 
-#define PVV1_DRV_VERSION	"2019-09-28"
+#define PVV1_DRV_VERSION	"2021-03-31"
 #define PVV1_DEVNAME "pvv1"
 #define PVV1_CHDEVNAME "chpvv1"
 #define GPIO_PVV1_DEVICE_DESC    "pvv1_device"
@@ -54,6 +54,9 @@ static int Major;
 static int Minor;
 static int Device_Status = 0;
 
+static int timeout = 4;
+static int pause = 4;
+module_param(pause,int,0);
 static dev_t dev_pvv;
 
 // для внутренного представления символьных устройств:
@@ -72,10 +75,9 @@ struct cpvv_dev *pvv_cdev;
 struct pvv_data *pvvdev;
 
 static DECLARE_WAIT_QUEUE_HEAD(wqrm);
-//static DECLARE_WAIT_QUEUE_HEAD(wqdpu);
 
 static int flagrm = 0;
-//static int flagdpu = 0;
+static int flagReset = 0;
 
 unsigned char errorPvv;
 
@@ -84,14 +86,11 @@ unsigned char errorPvv;
 struct mutex mutex;
 spinlock_t r_spinlock = SPIN_LOCK_UNLOCKED;
 int irqN;
-
+int irqN_poll;
 void wakeUpUserMode(unsigned long par)
 {
 	flagrm = 1;
 	wake_up_interruptible(&wqrm);// пробудить поток чтения
-
-	//flagdpu = 1;
-	//wake_up_interruptible(&wqdpu);// пробудить поток чтения
 }
 
 static irqreturn_t pvv_irqhandler(int irq, void *dev_id)
@@ -101,6 +100,7 @@ static irqreturn_t pvv_irqhandler(int irq, void *dev_id)
 	id = *((int*)dev_id);
 
 	irqN  = irq;
+	irqN_poll = irq;
 	wakeUpUserMode(IRQ_PVV1);
 
 	if(count==0)
@@ -147,19 +147,18 @@ static long pvv_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
 	{
         	case PVV1_IOCRESET_RM:
 		{
-			flagrm = 1;
+            flagrm = 1;
+            flagReset=1;
 			wake_up_interruptible(&wqrm);
 
 			retval = 0; //при работе с irq - функция ожидания получит typeIrq = 0; так как небыло прерывания и тип(номер) не установлен еще
+
+			irqN_poll=0;
 		}
 		break;
 		case PVV1_IOCRESET_DPU:
 		{
-			/*flagdpu = 1;
-			wake_up_interruptible(&wqdpu);
-			
-			retval = 0;*/
-			return -EFAULT;
+            return -EFAULT;
 		}
 		break;
 		case PVV1_IOCG_IRQ_RM:
@@ -175,8 +174,8 @@ static long pvv_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
     			flagrm = 0;
 
    			typeIrq = irqN;
+			
 
-			//mutex_lock_interruptible(&mutex);
 			mutex_lock(&mutex);
 			rez=copy_to_user((int __user *)arg, (char*)&typeIrq, sizeof(typeIrq));
 			mutex_unlock(&mutex);
@@ -192,34 +191,8 @@ static long pvv_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
 		}
 		break;
 		case PVV1_IOCG_IRQ_DPU:
-		{
-			/*typeIrq=0;
-
-			if(wait_event_interruptible(wqdpu, flagdpu != 0)>0)
-    			{
-        			printk(KERN_ERR "MPVV1: PVV1_IOCG_IRQ_DPU error ERESTARTSYS");
-        			return -ERESTARTSYS;
-    			}
-
-    			flagdpu = 0;
-
-   			typeIrq = irqN;
-
-			mutex_lock_interruptible(&mutex);
-			rez=copy_to_user((int __user *)arg, (char*)&typeIrq, sizeof(typeIrq));
-			mutex_unlock(&mutex);
-
-                	if(rez)
-                	{
-                        	printk(KERN_ERR "MPVV1: PVV1_IOCG_IRQ_DPU error copy_to_user witch IOCTL");
-                        	return -EFAULT;
-                	}
-
-                	retval = 0;
-			*/
+		{			
 			return -EFAULT;
-
-
 		}
 		break;
 		
@@ -236,13 +209,17 @@ static long pvv_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
 static int pvv_open(struct inode *inode, struct file *pFile)
 {
 
-	if(Device_Status>=COUNT_DEVICES) return -EBUSY;
+        if(Device_Status>=COUNT_DEVICES) return -EBUSY;
 
-	Device_Status++;
+	 irqN_poll=0;
+
+	timeout = pause;
+
+        Device_Status++;
 
     	try_module_get(THIS_MODULE);//увеличить счётчик ссылок для модуля (возвращается признак успешности операции);
 
-    	printk(KERN_INFO "MPVV1: pvv_open, count %d\n",Device_Status);
+    	printk(KERN_INFO "MPVV1: pvv_open, count %d, timeout %d mc, pause %d mc, jiffers %d\n",Device_Status,timeout,pause,jiffies);
 
     	return SUCCESS;	
 }
@@ -255,6 +232,8 @@ static int pvv_release(struct inode *inode, struct file *pFile)
 		Device_Status--;
 
 		module_put(THIS_MODULE);//уменьшить счётчик ссылок для модуля;
+
+		//wakeUpUserMode(IRQ_PVV1);
 
 		printk(KERN_INFO "MPVV1: pvv_release, count %d\n",Device_Status+1);
 	}
@@ -285,23 +264,53 @@ static ssize_t pvv_read (struct file *pFile, char __user *buffer, size_t length,
 	return typeIrq;
 }
 
+
 static unsigned int pvv_poll(struct file *pfile, poll_table *wait)
-{// для режима инициализации
+{//old: для режима инициализации
         unsigned int mask;
-        mask = 0;
+        mask = 0; 
 
         poll_wait(pfile, &wqrm, wait);
 
-	//mutex_lock_interruptible(&mutex);
-	mutex_lock(&mutex);
-
-	//if (pfile->f_pos != dev->posW)
         mask |= POLLIN | POLLRDNORM; //чтение
 
-        mutex_unlock(&mutex);
+        return mask;
+}//*/
+
+
+/*static unsigned int pvv_poll(struct file *pfile, poll_table *wait)//struct poll_table_struct *wait)//
+{// для режима инициализации -  c текущей конфигурации софта УПУ не работает
+        unsigned int mask;
+ 	int IRQ;
+	bool bIrq;
+
+	IRQ=0;
+        mask = 0; 
+	bIrq=false;
+
+        poll_wait(pfile, &wqrm, wait);
+	
+	mutex_lock(&mutex);
+   	if(irqN_poll>0)
+	{
+		bIrq=true;
+		IRQ=irqN_poll;
+		irqN_poll=0;
+		flagrm = 0;	
+	}
+	mutex_unlock(&mutex);
+
+	if(bIrq)
+	{
+		printk(KERN_INFO "MPVV1: POLL IRQ %d",IRQ);
+	        mask |= POLLIN | POLLRDNORM; //чтение		
+	}else 
+	{
+		printk(KERN_INFO "MPVV1: POLL TIMEOUT: IRQ %d",IRQ);
+	}	
 
         return mask;
-}
+}//*/
 
 static struct file_operations fops = {
 	.owner	= THIS_MODULE,

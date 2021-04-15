@@ -6,6 +6,7 @@ source "drivers/pvv/Kconfig"
 source "drivers/pvv3/Kconfig"
 source "drivers/pvv4/Kconfig"
 source "drivers/pvv5/Kconfig"
+source "drivers/chstime_hr_n/Kconfig"
 
 source "drivers/base/Kconfig"
 
