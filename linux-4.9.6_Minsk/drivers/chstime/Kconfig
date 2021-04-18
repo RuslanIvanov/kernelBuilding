@@ -1,0 +1,16 @@
+menuconfig KSDSERV1
+       bool "KSD SERVER support timer"
+
+if KSDSERV1
+
+config KSD_TIMER_DRIVER
+	tristate "Driver timer for KSD SERVER" 
+        default y
+        help
+		This is driver for KSD TIMER for SERVER (default 3c). 
+		Say Y here if you have a KSD TIMER for  SERVER in your system.
+
+		To compile this driver as a module, choose M here: the
+		module will be called psmouse.
+
+endif
