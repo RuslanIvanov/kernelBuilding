@@ -1639,4 +1639,10 @@ config SERIAL_ALTERA_UART_CONSOLE
 	help
 	  Enable a Altera UART port to be the system console.
 
+config SERIAL_SC16IS7XX_UART
+	bool "serial sc16is7xx uart console support"
+	select SERIAL_CORE_CONSOLE
+	help 
+		Enable a serial sc16is7xx uart.
+
 endmenu
