@@ -1,10 +1,10 @@
-# скомпилировать ядро с  tam3517_upum6_defconfig в ./arc/arm/config
+# скомпилировать ядро с  tam3517_upum6_defconfig в ./arc/arm/config (при необходимости скопировать cp -i ./tam3517_upum6_defconfig ./linux-2.6.37-tn_mupu_dr/arc/arm/config)
 
 варианты в 
 davinci_emac_corrrussl.c
 smsc911x_russl_correct.c
 
-не работают при не инициализированном адапторе (виснет ядро при загрузки) 
+не работают при не инициализированном адапторе (виснет ядро при загрузке) 
 
 возможно искать надо в загрузчике (?)
 
