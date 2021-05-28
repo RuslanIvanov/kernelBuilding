@@ -799,7 +799,7 @@ static int smsc911x_mii_probe(struct net_device *dev)
 			pdata->config.phy_interface);
 
 	if (ret) {
-		pr_err("%s: Could not attach to PHY (source TI)\n", dev->name);
+		pr_err("%s: Could not attach to PHY\n", dev->name);
 		return ret;
 	}
 

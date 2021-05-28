@@ -1537,6 +1537,7 @@ static int emac_dev_open(struct net_device *ndev)
 	int q, m, ret;
 	int i = 0, irq_num = 0;
 	int k = 0;
+	int countErr=0;
 	struct emac_priv *priv = netdev_priv(ndev);
 
 	netif_carrier_off(ndev);
@@ -1602,23 +1603,53 @@ static int emac_dev_open(struct net_device *ndev)
 	}
 
 	if (priv->phy_id && *priv->phy_id) {
-		priv->phydev = phy_connect(ndev, priv->phy_id,
+
+		do{//russl
+	
+			priv->phydev = phy_connect(ndev, priv->phy_id,
 					   &emac_adjust_link, 0,
 					   PHY_INTERFACE_MODE_MII);
+			if(countErr>=10)
+			{
+				if (IS_ERR(priv->phydev))
+				{
+					dev_err(emac_dev, "could not connect to phy %s, count %d\n",
+						priv->phy_id, countErr);
 
-		if (IS_ERR(priv->phydev)) {
-			dev_err(emac_dev, "could not connect to phy %s\n",
-				priv->phy_id);
-			priv->phydev = NULL;
-			return PTR_ERR(priv->phydev);
-		}
+					//priv->phydev = NULL;// old:
+					//return PTR_ERR(priv->phydev);// old:
+
+					if(priv->phydev)
+					{
+						strcpy(priv->phy_id,"7c0f1");
+
+						dev_err(emac_dev, "Apply fake id for phy %s, count %d\n",
+						priv->phy_id, countErr);
+
+						break;
+					}else 
+					{
+						priv->phydev = NULL;
+
+						dev_err(emac_dev, "Exit init for phy %s, count %d\n",
+						priv->phy_id, countErr);
+
+						return PTR_ERR(priv->phydev);
+					}
+				}
+			}
+
+			udelay(50);
+			countErr++;
+
+		}while(IS_ERR(priv->phydev));
 
 		priv->link = 0;
 		priv->speed = 0;
 		priv->duplex = ~0;
 
 		dev_info(emac_dev, "attached PHY driver [%s] "
-			"(mii_bus:phy_addr=%s, id=%x) (source TI)\n",
+			"(mii_bus:phy_addr=%s, id=%x)\n",
 			priv->phydev->drv->name, dev_name(&priv->phydev->dev),
 			priv->phydev->phy_id);
 	} else {

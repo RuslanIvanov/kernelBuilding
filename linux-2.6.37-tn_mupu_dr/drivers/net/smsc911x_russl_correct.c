@@ -782,7 +782,11 @@ static int smsc911x_mii_probe(struct net_device *dev)
 {
 	struct smsc911x_data *pdata = netdev_priv(dev);
 	struct phy_device *phydev = NULL;
+	char *phy_addr;	 
 	int ret;
+	int countRet;
+	countRet = 0;
+	phy_addr = NULL;
 
 	/* find the first phy */
 	phydev = phy_find_first(pdata->mii_bus);
@@ -793,19 +797,42 @@ static int smsc911x_mii_probe(struct net_device *dev)
 
 	SMSC_TRACE(PROBE, "PHY %d: addr %d, phy_id 0x%08X",
 			phy_addr, phydev->addr, phydev->phy_id);
+	
+	do {
 
-	ret = phy_connect_direct(dev, phydev,
+		ret = phy_connect_direct(dev, phydev,
 			&smsc911x_phy_adjust_link, 0,
 			pdata->config.phy_interface);
 
-	if (ret) {
-		pr_err("%s: Could not attach to PHY (source TI)\n", dev->name);
-		return ret;
-	}
+		if(countRet>=10){
+		if(ret) 
+		{	//russl
+			pr_err("%s: Could not attach to PHY, count %d\n", dev->name,countRet);
 
-	pr_info("%s: attached PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d)\n",
+			phy_addr = 0;
+			phydev->addr = 0; 
+			phydev->phy_id = 0x7c0f1;
+
+			SMSC_TRACE(PROBE, "Set fake params: PHY %d: addr %d, phy_id 0x%08X",
+			phy_addr, phydev->addr, phydev->phy_id);
+
+			//return ret;
+			ret = 0;
+			break;
+		}}
+
+		udelay(50);
+		//mdelay(1);
+
+		countRet++;
+
+		pr_err("%s: attaching number %d, ret %d[%xh]\n", dev->name, countRet,ret,ret);
+
+	}while(ret);
+
+	pr_info("%s: attached PHY driver [%s] (mii_bus:phy_addr=%s, irq=%d), count %d\n",
 		dev->name, phydev->drv->name,
-		dev_name(&phydev->dev), phydev->irq);
+		dev_name(&phydev->dev), phydev->irq,countRet);
 
 	/* mask with MAC supported features */
 	phydev->supported &= (PHY_BASIC_FEATURES | SUPPORTED_Pause |
