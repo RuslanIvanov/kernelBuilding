@@ -9,5 +9,5 @@ obj-$(CONFIG_N_GSM)		+= n_gsm.o
 obj-$(CONFIG_R3964)		+= n_r3964.o
 
 obj-y				+= vt/
-#obj-y                           += serial/
+obj-y                           += serial/
 
