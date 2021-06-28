@@ -8,11 +8,12 @@
 config SERIAL_SC16IS7XX_I2C
 #	bool "SC16IS7xx for I2C interface"
 	tristate "SC16IS7xx serial support"
+	default m
 	#depends on SERIAL_SC16IS7XX
 	depends on I2C
 	#select SERIAL_SC16IS7XX_CORE if SERIAL_SC16IS7XX
 #	select REGMAP_I2C if I2C
-	default m
+
 	help:
 	  Enable SC16IS7xx driver on I2C bus,
 	  If required say y, and say n to i2c if not required,

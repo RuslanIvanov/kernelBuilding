@@ -41,9 +41,9 @@ MODULE_LICENSE("GPL");
 #define TINY_SERIAL_MINORS	1	/* only have one minor */
 #define UART_NR			1	/* only use one port */
 
-#define TINY_SERIAL_NAME	"ttySBPR"
+#define TINY_SERIAL_NAME "ttyRM"
 
-#define MY_NAME			TINY_SERIAL_NAME
+#define MY_NAME	TINY_SERIAL_NAME
 
 struct port_data 
 {
@@ -248,7 +248,7 @@ static void tiny_shutdown(struct uart_port *port)
 
 static const char *tiny_type(struct uart_port *port)
 {
-	return "ttySBRP";
+	return "ttyRM";
 }
 
 static void tiny_release_port(struct uart_port *port)
@@ -310,13 +310,39 @@ static int __init tiny_init(void)
 
 	result = uart_register_driver(&tiny_reg);
 	if (result)
+	{
+		printk(KERN_INFO "BRP serial driver loaded is error1 %d\n",result);
 		return result;
+	}
 
 	result = uart_add_one_port(&tiny_reg, &tiny_port);
+
 	if (result)
+	{
 		uart_unregister_driver(&tiny_reg);
 
+		printk(KERN_INFO "BRP serial driver loaded is error2 %d\n",result);
+	}
+
+	printk(KERN_INFO "BRP serial driver loaded - OK %d\n",result);
 	return result;
 }
 
+
 module_init(tiny_init);
+
+
+
+
+/*
+кто первым dызывается, device_register() или driver_register() ?
+
+Как указано в Documentation/driver-model/binding.txt , не имеет значения, в каком конкретном порядке вы вызываете device_register() и driver_register() .
+
+    device_register() добавляет устройство в список устройств и перебирает список драйверов , чтобы найти совпадение
+    driver_register() добавляет драйвер в список драйверов и перебирает список устройств , чтобы найти совпадение
+
+Как только совпадение найдено, сопоставленное устройство и драйвер связываются, и соответствующая функция зонда вызывается в коде драйвера.
+
+Если вам все еще интересно , какой из них вызывается первым (потому что это не имеет значения) - обычно это device_register() , потому что устройства обычно регистрируются на initcalls от core_initcall до arch_initcall , а драйверы обычно регистрируются на device_initcall, которые выполняются позже. 
+*/

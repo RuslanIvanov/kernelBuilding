@@ -28,9 +28,7 @@
 #include <linux/seq_file.h>
 #include <asm/uaccess.h>
 #include <linux/timer.h>
-//#include <asm/termios.h>
-#include <linux/termios.h>
-#include <linux/ioctl.h>
+
 #include <linux/version.h>
 
 #define DRIVER_VERSION "v2.1"
@@ -65,52 +63,6 @@ struct tiny_serial
 };
 
 static struct tiny_serial *tiny_table[TINY_TTY_MINORS];	/* initially all NULL */
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
-/**
- * tty_port_link_device - link tty and tty_port
- * @port: tty_port of the device
- * @driver: tty_driver for this device
- * @index: index of the tty
- *
- * Provide the tty layer wit ha link from a tty (specified by @index) to a
- * tty_port (@port). Use this only if neither tty_port_register_device nor
- * tty_port_install is used in the driver. If used, this has to be called before
- * tty_register_driver.
- */
-/*
-void tty_port_link_device(struct tty_port *port,
-		struct tty_driver *driver, unsigned index)
-{
-	if (WARN_ON(index >= driver->num))
-		return;
-	driver->ports[index] = port;
-}
-EXPORT_SYMBOL_GPL(tty_port_link_device);
-*/
-/**
- * tty_port_register_device - register tty device
- * @port: tty_port of the device
- * @driver: tty_driver for this device
- * @index: index of the tty
- * @device: parent if exists, otherwise NULL
- *
- * It is the same as tty_register_device except the provided @port is linked to
- * a concrete tty specified by @index. Use this or tty_port_install (or both).
- * Call tty_port_link_device as a last resort.
- */
-/*
-struct device *tty_port_register_device(struct tty_port *port,
-		struct tty_driver *driver, unsigned index,
-		struct device *device)
-{
-	tty_port_link_device(port, driver, index);
-	return tty_register_device(driver, index, device);
-}
-EXPORT_SYMBOL_GPL(tty_port_register_device);
-*/
-#endif
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static void tiny_timer(unsigned long arg)
@@ -302,12 +254,12 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 {
 	unsigned int cflag;
 
-	cflag = tty->termios->c_cflag;
+	cflag = tty->termios.c_cflag;
 
 	/* check that they really want us to change something */
 	if (old_termios) {
 		if ((cflag == old_termios->c_cflag) &&
-		    (RELEVANT_IFLAG(tty->termios->c_iflag) ==
+		    (RELEVANT_IFLAG(tty->termios.c_iflag) ==
 		     RELEVANT_IFLAG(old_termios->c_iflag))) {
 			printk(KERN_DEBUG " - nothing to change...\n");
 			return;
@@ -586,10 +538,6 @@ static int __init tiny_init(void)
 {
 	int retval;
 	int i;
-	int error;
-
-	i=0; retval = 0;
-	error =0;
 	struct tiny_serial *tiny;
 
 	/* allocate the tty driver */
@@ -599,13 +547,12 @@ static int __init tiny_init(void)
 
 	/* initialize the tty driver */
 	tiny_tty_driver->owner = THIS_MODULE;
-	tiny_tty_driver->driver_name = "ttyBRP";
+	tiny_tty_driver->driver_name = "BRP_tty";
 	tiny_tty_driver->name = "ttyBRP";
-//	tiny_tty_driver->devfs_name = "tts/ttty%d";
 	tiny_tty_driver->major = TINY_TTY_MAJOR,
 	tiny_tty_driver->type = TTY_DRIVER_TYPE_SERIAL,
 	tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
-	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV*/, //TTY_DRIVER_NO_DEVFS
+	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV,
 	tiny_tty_driver->init_termios = tty_std_termios;
 	tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	tty_set_operations(tiny_tty_driver, &serial_ops);
@@ -613,16 +560,13 @@ static int __init tiny_init(void)
 	/* register the tty driver *///При вызове tty_register_driver ядро создаёт в sysfs все различные tty файлы на весь
 	//диапазон младших номеров tty устройств, которые может иметь этот tty драйвер
 	retval = tty_register_driver(tiny_tty_driver);
-	if (retval) 
-	{
+	if (retval) {
 		printk(KERN_ERR "failed to register tiny tty driver, retval=%d", retval);
 		goto err_tty_register_driver;
 	}
+	printk(KERN_ERR "register success. major=%d", tiny_tty_driver->major);
 
-	printk(KERN_ERR "ttyBRP: register success. major=%d", tiny_tty_driver->major);
-
-	for (i = 0; i < TINY_TTY_MINORS; ++i) 
-	{
+	for (i = 0; i < TINY_TTY_MINORS; ++i) {
 		/* let's create it */
 		tiny = kmalloc(sizeof(*tiny), GFP_KERNEL);
 		if (!tiny) {
@@ -638,24 +582,9 @@ static int __init tiny_init(void)
 		tiny->port.ops = &tiny_port_ops;
 	}
 
-		//for (i = 0; i < TINY_TTY_MINORS; ++i) 
-		//{
-			//tty_port_register_device(&tiny_table[i]->port, tiny_tty_driver, i, NULL);//??
-
-			//struct device *tty_register_device(struct tty_driver *driver,  unsigned index, struct device *dev);
-
-		//}
-
-	 for (i = 0; i < TINY_TTY_MINORS; ++i)
-	 {
-		/* error = tty_register_device(tiny_tty_driver, i, NULL);
-		
-		 if(error)
-		 { 	
-			printk(KERN_ERR "BRP: Couldn't register devices, error = %xh (%d)\n",error,error);
-		 }*/
-	 }
-
+	for (i = 0; i < TINY_TTY_MINORS; ++i) {
+		tty_port_register_device(&tiny_table[i]->port, tiny_tty_driver, i, NULL);
+	}
 
 	printk(KERN_INFO DRIVER_DESC " " DRIVER_VERSION "\n");
 	return retval;
@@ -664,7 +593,7 @@ err_kmalloc_tiny:
 	for (i = 0; i < TINY_TTY_MINORS; ++i) {
 		tiny = tiny_table[i];
 		if (tiny) {
-			//tty_port_destroy(&tiny->port);
+			tty_port_destroy(&tiny->port);
 			kfree(tiny);
 		}
 	}
@@ -694,8 +623,7 @@ static void __exit tiny_exit(void)
 		if(tiny->port.count)
 			tiny_shutdown(&tiny->port);
 
-		//tty_port_destroy(&tiny->port);
-
+		tty_port_destroy(&tiny->port);
 		kfree(tiny);
 		tiny_table[i] = NULL;
 	}
