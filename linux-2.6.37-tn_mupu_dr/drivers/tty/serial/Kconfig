@@ -5,20 +5,20 @@
 #menu "BPR serial drivers"
 #	depends on HAS_IOMEM
 
-config SERIAL_SC16IS7XX_I2C
+#config SERIAL_SC16IS7XX_I2C
 #	bool "SC16IS7xx for I2C interface"
-	tristate "SC16IS7xx serial support"
-	default m
-	#depends on SERIAL_SC16IS7XX
-	depends on I2C
-	#select SERIAL_SC16IS7XX_CORE if SERIAL_SC16IS7XX
-#	select REGMAP_I2C if I2C
-
-	help:
-	  Enable SC16IS7xx driver on I2C bus,
-	  If required say y, and say n to i2c if not required,
-	  Enabled by default to support oldconfig.
-	#You must select at least one bus for the driver to be built.
+##	tristate "SC16IS7xx serial support"
+#	default m
+#	#depends on SERIAL_SC16IS7XX
+#	depends on I2C
+#	#select SERIAL_SC16IS7XX_CORE if SERIAL_SC16IS7XX
+##	select REGMAP_I2C if I2C
+#
+#	help:
+#	  Enable SC16IS7xx driver on I2C bus,
+#	  If required say y, and say n to i2c if not required,
+#	  Enabled by default to support oldconfig.
+#	#You must select at least one bus for the driver to be built.
 
 config TINY_SERIAL
         tristate "TINY SERIAL"

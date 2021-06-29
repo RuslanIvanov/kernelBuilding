@@ -543,13 +543,13 @@ config SERIAL_S5PV210
 	help
 	  Serial port support for Samsung's S5P Family of SoC's
 
-if UPUM6
-config SERIAL_SC16IS7XX
-	tristate "SC16IS7XX support"
-	select SERIAL_CORE
-       	help
-          	SC16IS7XX chip support
-endif
+#if UPUM6
+#config SERIAL_SC16IS7XX
+#	tristate "SC16IS7XX support"
+#	select SERIAL_CORE
+#       	help
+#          	SC16IS7XX chip support
+#endif
 
 config SERIAL_MAX3100
 	tristate "MAX3100 support"
@@ -1639,7 +1639,7 @@ config SERIAL_ALTERA_UART_CONSOLE
 	help
 	  Enable a Altera UART port to be the system console.
 
-config SERIAL_SC16IS7XX_UART
+config SERIAL_SC16IS7XX_I2C
 	bool "serial sc16is7xx uart console support"
 	select SERIAL_CORE_CONSOLE
 	help 

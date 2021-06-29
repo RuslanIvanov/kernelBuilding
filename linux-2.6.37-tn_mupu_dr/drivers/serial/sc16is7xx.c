@@ -29,7 +29,8 @@
 #include <linux/uaccess.h>
 #include <linux/serial_sc16ix7xx.h>
 
-#define SC16IS7XX_NAME			"sc16is7xx"
+#define SC16IS7XX_NAME		"sc16is750"//	"sc16is7xx"
+
 #define SC16IS7XX_A			"sc16is7xxA"
 #define SC16IS7XX_B			"sc16is7xxB"
 #define SC16IS7XX_C			"sc16is7xxC"
@@ -308,7 +309,7 @@
 
 struct sc16is7xx_devtype 
 {
-	char	name[10];
+	char name[20];
 	int	nr_gpio;
 	int	nr_uart;
 };
@@ -342,6 +343,8 @@ static int sc16is7xx_line;
 
 static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_t *data)
 {
+	   int ret;
+
         struct i2c_msg msgs[] = {
                 {
                         .addr   = client->addr,
@@ -357,9 +360,8 @@ static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_
                 }
         };
 	
-	printk(KERN_INFO "sc16is7xx_i2c_read_reg: RUN");
-
-        int ret;
+		printk(KERN_INFO "sc16is7xx_i2c_read_reg: RUN");
+     
 
         data[0] = reg;
 
@@ -367,18 +369,18 @@ static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_
 
         if (ret != ARRAY_SIZE(msgs)) 
         {
-		printk(KERN_ERR "%s: read error, ret=%d\n",__func__, ret);
-                return -EIO;
+			printk(KERN_ERR "%s: read error, ret=%d\n",__func__, ret);
+            return -EIO;
         }
 	
-	printk(KERN_INFO "sc16is7xx_i2c_read_reg: OK");
+		printk(KERN_INFO "sc16is7xx_i2c_read_reg: OK");
 
         return 0;
 }
 
 static int sc16is7xx_i2c_write_reg(struct i2c_client *client, uint16_t reg, uint8_t val)
 {
-	printk(KERN_INFO "sc16is7xx_i2c_write_reg: RUN"); 	
+	
 
         uint8_t data[2];
         int err;
@@ -386,14 +388,16 @@ static int sc16is7xx_i2c_write_reg(struct i2c_client *client, uint16_t reg, uint
         data[0] = reg;
         data[1] = val;
 
+		printk(KERN_INFO "sc16is7xx_i2c_write_reg: RUN"); 	
+
         err = i2c_master_send(client, data, sizeof(data));
         if (err != sizeof(data))
         {
         	printk(KERN_ERR"%s: err=%d addr=%02x, data=%02x\n",__func__, err, data[0], data[1]); 
-		return -EIO;
+			return -EIO;
         }
 
-	printk(KERN_INFO "sc16is7xx_i2c_write_reg: OK"); 	
+		printk(KERN_INFO "sc16is7xx_i2c_write_reg: OK"); 	
 
         return 0;
 }
@@ -1189,20 +1193,26 @@ static int sc16is7xx_gpio_direction_output(struct gpio_chip *chip,
 static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype,  /*struct regmap *regmap*/struct i2c_client *i2c, int irq, unsigned long flags)
 {
 	//dev_get_platdata(const struct device *dev) { return dev->platform_data; }
-	unsigned long freq;
-	struct plat_serial_sc16ix7xx *pfreq; 
+	unsigned long freq;	
+	//struct plat_serial_sc16ix7xx *pfreq; 
+	struct plat_serial_sxx *pfreq;
 	int i, ret;
 	char nameDev[10];
 	struct sc16is7xx_port *s;
 	static unsigned char countProbe;
 
 	countProbe++;
+	freq = 14745600;
+
 	printk(KERN_INFO "sc16is7xx_probe: run (%d)",countProbe);
 
-	if (IS_ERR(/*regmap*/ i2c))
-		return PTR_ERR(/*regmap*/ i2c);
+	if (IS_ERR( i2c ))
+		return PTR_ERR( i2c );
 
-	pfreq = dev_get_platdata(dev);
+	/*static inline void *dev_get_platdata(const struct device *dev){ return dev->platform_data;}*/
+
+	pfreq = dev_get_platdata(dev);// dev->platform_data -> struct plat_serial_sxx
+
 	/* Alloc port structure */
 	s = devm_kzalloc(dev, sizeof(*s) + sizeof(struct sc16is7xx_one) * devtype->nr_uart,GFP_KERNEL);
 	if (!s) 
@@ -1225,9 +1235,14 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 		printk(KERN_INFO "sc16is7xx_probe: clock UART is use");
 	}	
 
-	if (IS_ERR(s->clk)) {
+	if (IS_ERR(s->clk)) 
+	{
 		if (pfreq)
-			freq = pfreq->uartclk;//*pfreq;
+		{
+			freq = pfreq->uartclk;//обращение к struct plat_serial_sxx
+
+			printk(KERN_INFO "sc16is7xx_probe: clock %ld", pfreq->uartclk);
+		}
 		else
 			return PTR_ERR(s->clk);
 	} else 
@@ -1245,29 +1260,16 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	printk(KERN_INFO "sc16is7xx_probe: Registering UART driver...");
 
 	/* Register UART driver */
-	s->uart.owner		= THIS_MODULE;
-
-	if(pfreq->num_i2c==0)
-			s->uart.dev_name = "ttyS1PVV";
-	else if(pfreq->num_i2c==1)
-			s->uart.dev_name = "ttyS2PVV";
-	else if(pfreq->num_i2c==2) 
-			s->uart.dev_name = "ttyS3PVV";
-		else  s->uart.dev_name = "ttySPVV";
+	s->uart.owner = THIS_MODULE;
+	s->uart.dev_name = "ttyBRP";
+	//s->uart.dev_name = "ttySC";
 
 	//strcat(s->uart.dev_name, pfreq->name_i2c);
 
 	printk(KERN_INFO "sc16is7xx_probe: dev_name UART driver ' %s '",s->uart.dev_name);
 
 	s->uart.nr	= devtype->nr_uart;
-
-	if(pfreq->num_i2c==0)
-		s->uart.dev_name = SC16IS7XX_A;
-	else if(pfreq->num_i2c==1)
-			s->uart.dev_name = SC16IS7XX_B;
-	else if(pfreq->num_i2c==2) 
-			s->uart.dev_name = SC16IS7XX_C;
-		else  s->uart.dev_name = SC16IS7XX_NAME;
+	//s->uart.dev_name = SC16IS7XX_NAME;
 
 	s->uart.major		= SC16IS7XX_MAJOR+(pfreq->num_i2c);
 	s->uart.minor		= SC16IS7XX_MINOR_START;
@@ -1288,16 +1290,16 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	printk(KERN_INFO "sc16is7xx_probe: GPIOLIB");
 	if (devtype->nr_gpio) {
 		/* Setup GPIO cotroller */
-		s->gpio.owner		 = THIS_MODULE;
+		s->gpio.owner	 = THIS_MODULE;
 		s->gpio.dev		 = dev;
-		s->gpio.label		 = dev_name(dev);
+		s->gpio.label	 = dev_name(dev);
 		s->gpio.direction_input	 = sc16is7xx_gpio_direction_input;
 		s->gpio.get		 = sc16is7xx_gpio_get;
 		s->gpio.direction_output = sc16is7xx_gpio_direction_output;
 		s->gpio.set		 = sc16is7xx_gpio_set;
-		s->gpio.base		 = -1;
-		s->gpio.ngpio		 = devtype->nr_gpio;
-		s->gpio.can_sleep	 = 1;
+		s->gpio.base	 = -1;
+		s->gpio.ngpio	 = devtype->nr_gpio;
+		s->gpio.can_sleep= 1;
 		ret = gpiochip_add(&s->gpio);
 		if (ret)
 			goto out_uart;
@@ -1424,7 +1426,7 @@ static int sc16is7xx_i2c_probe(struct i2c_client *i2c, const struct i2c_device_i
 	int ret;
 	ret = -1;
 
-	printk(KERN_INFO"sc16is7xx_i2c_probe: i2c name '%s' ,bus '%s' run",i2c->name, i2c->dev.bus->name);
+	printk(KERN_INFO "sc16is7xx_i2c_probe: i2c name '%s' ,bus '%s' run",i2c->name, i2c->dev.bus->name);
 
 	if (!i2c_check_functionality(i2c->adapter, I2C_FUNC_I2C))
 	{
@@ -1490,7 +1492,8 @@ static const struct i2c_device_id sc16is7xx_id[] = {
 };*/
 
 static struct i2c_driver sc16is7xx_i2c_uart_driver = {
-	.driver = {
+	.driver = 
+	{
 		.name		= SC16IS7XX_NAME,
 		.owner		= THIS_MODULE,
 		
@@ -1504,12 +1507,16 @@ static struct i2c_driver sc16is7xx_i2c_uart_driver = {
 static int __init sc16is7xx_init(void)
 {
 	printk(KERN_INFO "sc16is7xx_init: run");
+
+	//д.б. часть pvv1 c irq & gpio
 	return i2c_add_driver(&sc16is7xx_i2c_uart_driver);
+	//return platform_driver_register(&sc16is7xx_i2c_uart_driver);
 }
 
 static void __exit sc16is7xx_exit(void)
 {
 	i2c_del_driver(&sc16is7xx_i2c_uart_driver);
+	//platform_driver_unregister(&sc16is7xx_i2c_uart_driver);
 }
 
 module_init(sc16is7xx_init);

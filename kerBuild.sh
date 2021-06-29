@@ -64,7 +64,7 @@ tam3517)
 ;;
 
 tam3517_upum6)
-	defconfig=tam3517_upum6_defconfig
+	defconfig=./tam3517_upum6_defconfig
 	echo "usage tam3517_upum6_defconfig"
 	sleep 5
 ;;

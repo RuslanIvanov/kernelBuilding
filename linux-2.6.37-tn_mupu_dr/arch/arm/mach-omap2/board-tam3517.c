@@ -622,22 +622,21 @@ static struct i2c_board_info __initdata tam3517_i2c1_boardinfo[] = {
 #define TWISTER_PRISM_GPIO_TS_IRQ 177
 
 #if defined(CONFIG_UPUPVV)
-#if defined(CONFIG_SERIAL_SC16IS7XX)
+#if defined(CONFIG_SERIAL_SC16IS7XX_I2C)
 	#define GPIO_PVV1  0
 	#define GPIO_PVV2  136
 
-static struct plat_serial_sc16ix7xx /*__initdata*/ sc16ix7xx_ports[] = {
+static struct plat_serial_sxx __initdata sc16ix7xx_ports[] = {
 	{
 		.uartclk = 14745600,
-		.num_i2c = 0,//1,//i2c2
-		.name_i2c = "PVV",
+		.num_i2c = 1,//1,//i2c2
+		.name_i2c = "BRP_I2C",
 	},
-	/*{
+	{
 		.uartclk = 14745600,
-		.num_i2c = 1,//2,//i2c3
-		.name_i2c = "PVV",
-	},*/
-	{}
+		.num_i2c = 2,//2,//i2c3
+		.name_i2c = "BRP_I3C",
+	},	
 };
 
 #endif
@@ -664,13 +663,13 @@ static struct i2c_board_info __initdata tam3517_i2c2_boardinfo[] = {
 #endif
 
 #if defined(CONFIG_UPUPVV)
-#if defined(CONFIG_SERIAL_SC16IS7XX)
+#if defined(CONFIG_SERIAL_SC16IS7XX_I2C)
 	{
-                I2C_BOARD_INFO("sc16is760",0x49),//SC16IS760 //sc16is760 //sc16is7xx
+        I2C_BOARD_INFO("sc16is750",0x49),//SC16IS760 //sc16is760 //sc16is7xx
 		.irq = OMAP_GPIO_IRQ(GPIO_PVV1),
 		.flags = (IORESOURCE_IRQ | IRQF_TRIGGER_FALLING) & IRQF_TRIGGER_MASK, //I2C_CLIENT_WAKE
-		.platform_data = (void*)&sc16ix7xx_ports[0],
-        },
+		.platform_data = (void*)&sc16ix7xx_ports[0],		
+     },
 #endif
 #endif
 
@@ -941,8 +940,8 @@ static void __init tam3517_init(void)
 	
 #if defined(CONFIG_UPUPVV)
 	printk(KERN_INFO "tam3517_init: CONFIG_UPUPVV");
-#if defined(CONFIG_SERIAL_SC16IS7XX)
-	printk(KERN_INFO "tam3517_init: CONFIG_SERIAL_SC16IS7XX");
+#if defined(CONFIG_SERIAL_SC16IS7XX_I2C)
+	printk(KERN_INFO "tam3517_init: CONFIG_SERIAL_SC16IS7XX_I2C");
 #endif
 #endif
 

@@ -7,8 +7,8 @@
 
 struct plat_serial_sc16ix7xx
 {
-	char   		name_i2c[5];    /* name i2c bus */
-	unsigned long   num_i2c;        /* number i2c bus */
+		char   			name_i2c[5];    /* name i2c bus */
+		unsigned long   num_i2c;        /* number i2c bus */
         unsigned long   iobase;         /* io base address */
         void __iomem    *membase;       /* ioremap cookie or NULL */
         resource_size_t mapbase;        /* resource base */
@@ -29,6 +29,15 @@ struct plat_serial_sc16ix7xx
         int             (*handle_irq)(struct uart_port *);
         void            (*pm)(struct uart_port *, unsigned int state, unsigned old);
 };
+
+struct plat_serial_sxx
+{
+		unsigned long uartclk;
+		unsigned long num_i2c;
+		char name_i2c[20];
+};
+
+//struct plat_serial_sxx;
 
 struct uart_port;
 
