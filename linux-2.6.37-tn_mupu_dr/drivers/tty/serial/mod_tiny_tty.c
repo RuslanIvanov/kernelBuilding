@@ -197,6 +197,8 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 	int index;
 	struct tty_port *port;
 	int status;
+	
+	printk(KERN_INFO "\ntiny open\n");
 
 	/* initialize the pointer in case something fails */
 	tty->driver_data = NULL;
@@ -301,6 +303,8 @@ exit:
 static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	unsigned int cflag;
+
+	printk(KERN_INFO "TINY: tiny_set_termios\n");
 
 	cflag = tty->termios->c_cflag;
 
@@ -599,9 +603,9 @@ static int __init tiny_init(void)
 
 	/* initialize the tty driver */
 	tiny_tty_driver->owner = THIS_MODULE;
-	tiny_tty_driver->driver_name = "ttyBRP";
-	tiny_tty_driver->name = "ttyBRP";
-//	tiny_tty_driver->devfs_name = "tts/ttty%d";
+	tiny_tty_driver->driver_name = "tty_BRM";
+	tiny_tty_driver->name = "ttyBR";
+//	tiny_tty_driver->devfs_name = "tts/tttBR%d";
 	tiny_tty_driver->major = TINY_TTY_MAJOR,
 	tiny_tty_driver->type = TTY_DRIVER_TYPE_SERIAL,
 	tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
@@ -619,7 +623,7 @@ static int __init tiny_init(void)
 		goto err_tty_register_driver;
 	}
 
-	printk(KERN_ERR "ttyBRP: register success. major=%d", tiny_tty_driver->major);
+	printk(KERN_ERR "ttyRM: register success. major=%d", tiny_tty_driver->major);
 
 	for (i = 0; i < TINY_TTY_MINORS; ++i) 
 	{
@@ -638,23 +642,25 @@ static int __init tiny_init(void)
 		tiny->port.ops = &tiny_port_ops;
 	}
 
+	printk(KERN_INFO "ttyRM .n..");
+
 		//for (i = 0; i < TINY_TTY_MINORS; ++i) 
 		//{
-			//tty_port_register_device(&tiny_table[i]->port, tiny_tty_driver, i, NULL);//??
+		//	tty_port_register_device(&tiny_table[i]->port, tiny_tty_driver, i, NULL);//??
 
 			//struct device *tty_register_device(struct tty_driver *driver,  unsigned index, struct device *dev);
 
-		//}
+	//	}
 
-	 for (i = 0; i < TINY_TTY_MINORS; ++i)
+	/* for (i = 0; i < TINY_TTY_MINORS; ++i)
 	 {
-		/* error = tty_register_device(tiny_tty_driver, i, NULL);
+		 error = tty_register_device(tiny_tty_driver, i, NULL);
 		
 		 if(error)
 		 { 	
-			printk(KERN_ERR "BRP: Couldn't register devices, error = %xh (%d)\n",error,error);
-		 }*/
-	 }
+			printk(KERN_ERR "TINY: Couldn't register devices, error = %xh (%d)\n",error,error);
+		 }
+	 }*/
 
 
 	printk(KERN_INFO DRIVER_DESC " " DRIVER_VERSION "\n");

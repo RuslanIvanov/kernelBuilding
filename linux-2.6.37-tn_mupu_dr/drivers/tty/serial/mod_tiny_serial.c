@@ -25,6 +25,10 @@
 
 #include <linux/timer.h>
 
+/*
+setserial -a /dev/ttyS0
+*/
+
 
 #define DRIVER_AUTHOR "Greg Kroah-Hartman <greg@kroah.com>"
 #define DRIVER_DESC "Tiny serial driver"
@@ -37,7 +41,7 @@ MODULE_LICENSE("GPL");
 #define DELAY_TIME		HZ * 2	/* 2 seconds per character */
 #define TINY_DATA_CHARACTER	't'
 
-#define TINY_SERIAL_MAJOR	240	/* experimental range */
+#define TINY_SERIAL_MAJOR	707	/* experimental range */
 #define TINY_SERIAL_MINORS	1	/* only have one minor */
 #define UART_NR			1	/* only use one port */
 
@@ -60,19 +64,25 @@ static int tiny_startup(struct uart_port *port);
 
 static void tiny_stop_tx(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_stop_tx\n");
 }
 
 static void tiny_stop_rx(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_stop_rx\n");
 }
 
 static void tiny_enable_ms(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_enable_ms\n");
 }
 
 static void tiny_tx_chars(struct uart_port *port)
 {
 	struct circ_buf *xmit = &port->state->xmit;
+
+	printk(KERN_INFO "BRP tiny_tx_chars\n");
+
 	int count;
 
 	if (port->x_char) 
@@ -105,6 +115,7 @@ static void tiny_tx_chars(struct uart_port *port)
 
 static void tiny_start_tx(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_start_tx\n");
 }
 
 
@@ -140,32 +151,42 @@ static void tiny_timer(struct timer_list* arg)
 
 	/* see if we have any data to transmit */
 	tiny_tx_chars(port);
+
+	printk(KERN_INFO "BRP tiny_timer\n");
 }
 
 static unsigned int tiny_tx_empty(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_tx_empty\n");
 	return 0;
 }
 
 static unsigned int tiny_get_mctrl(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_get_mctrl\n");
 	return 0;
 }
 
 static void tiny_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
+	printk(KERN_INFO "BRP tiny_set_mctrl\n");
 }
 
 static void tiny_break_ctl(struct uart_port *port, int break_state)
 {
+	printk(KERN_INFO "BRP tiny_break_ctl\n");
 }
 
 static void tiny_set_termios(struct uart_port *port,
 			     struct ktermios *new, struct ktermios *old)
 {
 	int baud, quot, cflag = new->c_cflag;
+
+	printk(KERN_INFO "BRP tiny_set_termios\n");
+
 	/* get the byte size */
-	switch (cflag & CSIZE) {
+	switch (cflag & CSIZE) 
+	{
 	case CS5:
 		printk(KERN_DEBUG " - data bits = 5\n");
 		break;
@@ -234,6 +255,8 @@ static int tiny_startup(struct uart_port *port)
 	tiny_port_data.timer.expires = jiffies + DELAY_TIME;
 	add_timer(&tiny_port_data.timer);
 
+	printk(KERN_INFO "BRP tiny_startup\n");
+
 	return 0;
 }
 
@@ -243,30 +266,36 @@ static void tiny_shutdown(struct uart_port *port)
 	/* Do any hardware specific stuff here */
 
 	/* shut down our timer */
+
+	printk(KERN_INFO "BRP iny_shutdown\n");
 	del_timer(&tiny_port_data.timer);
 }
 
 static const char *tiny_type(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_type\n");
 	return "ttyRM";
 }
 
 static void tiny_release_port(struct uart_port *port)
 {
-
+	printk(KERN_INFO "BRP tiny_release_port\n");
 }
 
 static int tiny_request_port(struct uart_port *port)
 {
+	printk(KERN_INFO "BRP tiny_request_port\n");
 	return 0;
 }
 
 static void tiny_config_port(struct uart_port *port, int flags)
 {
+	printk(KERN_INFO "BRP tiny_config_port\n");
 }
 
 static int tiny_verify_port(struct uart_port *port, struct serial_struct *ser)
 {
+	printk(KERN_INFO "BRP tiny_verify_port\n");
 	return 0;
 }
 

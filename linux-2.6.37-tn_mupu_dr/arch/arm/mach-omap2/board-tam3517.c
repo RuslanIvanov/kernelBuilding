@@ -630,12 +630,12 @@ static struct plat_serial_sxx __initdata sc16ix7xx_ports[] = {
 	{
 		.uartclk = 14745600,
 		.num_i2c = 1,//1,//i2c2
-		.name_i2c = "BRP_I2C",
+		.name_i2c = "sc16is750",//"BRP_I2C",
 	},
 	{
 		.uartclk = 14745600,
 		.num_i2c = 2,//2,//i2c3
-		.name_i2c = "BRP_I3C",
+		.name_i2c ="sc16is750" ,//"BRP_I3C",
 	},	
 };
 
@@ -643,11 +643,9 @@ static struct plat_serial_sxx __initdata sc16ix7xx_ports[] = {
 #endif
 
 static struct i2c_board_info __initdata tam3517_i2c2_boardinfo[] = {
-/*
-	{
-		I2C_BOARD_INFO("tlv320aic23", 0x1A),
-	},
-*/
+
+//	{I2C_BOARD_INFO("tlv320aic23", 0x1A),},
+
 #if defined(CONFIG_TOUCHSCREEN_PRISM)
         {
                 I2C_BOARD_INFO("prism", 0x10),
@@ -665,7 +663,7 @@ static struct i2c_board_info __initdata tam3517_i2c2_boardinfo[] = {
 #if defined(CONFIG_UPUPVV)
 #if defined(CONFIG_SERIAL_SC16IS7XX_I2C)
 	{
-        I2C_BOARD_INFO("sc16is750",0x49),//SC16IS760 //sc16is760 //sc16is7xx
+        I2C_BOARD_INFO("sc16is750",0x4b),//SC16IS760 //sc16is760 //sc16is7xx
 		.irq = OMAP_GPIO_IRQ(GPIO_PVV1),
 		.flags = (IORESOURCE_IRQ | IRQF_TRIGGER_FALLING) & IRQF_TRIGGER_MASK, //I2C_CLIENT_WAKE
 		.platform_data = (void*)&sc16ix7xx_ports[0],		
@@ -683,9 +681,7 @@ static struct i2c_board_info __initdata tam3517_i2c3_boardinfo[] = {
 #else
 
 #if defined(CONFIG_RTC_DRV_ISL12029)
-	/*{
-		I2C_BOARD_INFO("isl12029",0x6f),
-	},*/
+	//{	I2C_BOARD_INFO("isl12029",0x6f),},
 #endif
 
 #if defined(CONFIG_SERIAL_SC16IS7XX)

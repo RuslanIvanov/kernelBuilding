@@ -300,8 +300,8 @@
 #define SC16IS7XX_FIFO_SIZE		(64)
 #define SC16IS7XX_REG_SHIFT		2
 
-#define SC16IS7XX_MAJOR         205
-#define SC16IS7XX_MINOR_START   205
+#define SC16IS7XX_MAJOR         708
+#define SC16IS7XX_MINOR_START   708
 #define SC16IS7XX_NR            2
 
 #define        UART_PM_STATE_ON   0
@@ -456,7 +456,7 @@ static const struct sc16is7xx_devtype sc16is74x_devtype = {
 };
 
 static const struct sc16is7xx_devtype sc16is750_devtype = {
-	.name		= "SC16IS750",
+	.name		= "sc16is750",//"SC16IS750",
 	.nr_gpio	= 8,
 	.nr_uart	= 1,
 };
@@ -1251,8 +1251,7 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	}
 
 	printk(KERN_INFO "sc16is7xx_probe: frec = %ld",freq);
-
-	//s->regmap = regmap;
+	
 	s->client = i2c;
 	s->devtype = devtype;
 	dev_set_drvdata(dev, s);
@@ -1262,7 +1261,7 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	/* Register UART driver */
 	s->uart.owner = THIS_MODULE;
 	s->uart.dev_name = "ttyBRP";
-	//s->uart.dev_name = "ttySC";
+	s->uart.driver_name = "ttyBRP";
 
 	//strcat(s->uart.dev_name, pfreq->name_i2c);
 
@@ -1342,7 +1341,7 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 		printk(KERN_INFO "sc16is7xx_probe: port line %d",s->p[i].port.line);
 	}
 
-	
+	//platform_driver_register(serial_omap_driver);
 	/* Setup interrupt */
 	ret = devm_request_threaded_irq(dev, irq, NULL, sc16is7xx_ist,IRQF_ONESHOT | flags, dev_name(dev), s);
 	if (!ret)
@@ -1491,16 +1490,29 @@ static const struct i2c_device_id sc16is7xx_id[] = {
 	{ }
 };*/
 
+#ifdef CONFIG_OF
+static const struct of_device_id sc16is7xx_ids[] = 
+{
+	.compatible = "nxp,sc16is750",
+	{}
+};
+MODULE_DEVICE_TABLE(of, sc16is7xx_ids);
+#endif
+
+
 static struct i2c_driver sc16is7xx_i2c_uart_driver = {
 	.driver = 
 	{
 		.name		= SC16IS7XX_NAME,
 		.owner		= THIS_MODULE,
-		
+		#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(sc16is7xx_ids),
+		#endif
 	},
 	.probe		= sc16is7xx_i2c_probe,
 	.remove		= sc16is7xx_i2c_remove,
 	.id_table	= sc16is7xx_i2c_id_table,
+
 };
 //module_i2c_driver(sc16is7xx_i2c_uart_driver);
 
