@@ -51,7 +51,7 @@ MODULE_LICENSE("GPL");
 struct tiny_serial 
 {
 	struct tty_port	port;		/* pointer to the tty for this device */
-	struct mutex	port_write_mutex;
+	struct mutex port_write_mutex;
 	struct timer_list	timer;
 
 	/* for tiocmget and tiocmset functions */
@@ -62,6 +62,11 @@ struct tiny_serial
 	struct serial_struct	serial;
 	wait_queue_head_t	wait;
 	struct async_icount	icount;
+
+	unsigned char bufferIn[8024];
+	unsigned char bufferOut[8024];
+	unsigned short indexIn;
+	unsigned short indexOut;
 };
 
 static struct tiny_serial *tiny_table[TINY_TTY_MINORS];	/* initially all NULL */
@@ -209,6 +214,9 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 	port = &tiny->port;
 
+	port->indexIn=0;
+	port->indexOut=0;
+
 	status = tty_port_open(port, tty, file);
 
 	if(!status) {
@@ -231,23 +239,22 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 		tty_port_close(port, tty, file);
 }	
 
-static int tiny_write(struct tty_struct *tty, 
-		      const unsigned char *buffer, int count)
-{
+static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int count)
+{//по 255 байт
 	struct tiny_serial *tiny = tty->driver_data;
 	int i;
 	int retval;
 	struct tty_port *port;
 	unsigned long flags;
 
-	if (!tiny)
-		return -ENODEV;
+	if (!tiny) { return -ENODEV; }
 
 	mutex_lock(&tiny->port_write_mutex);
 
 	port = &tiny->port;
 	spin_lock_irqsave(&port->lock, flags);
-	if (!port->count) {
+	if (!port->count) 
+	{
 		spin_unlock_irqrestore(&port->lock, flags);
 		/* port was not opened */
 		retval = -EINVAL;
@@ -258,9 +265,13 @@ static int tiny_write(struct tty_struct *tty,
 	/* fake sending the data out a hardware port by
 	 * writing it to the kernel debug log.
 	 */
+
+
+	
 	printk(KERN_DEBUG "%s - ", __FUNCTION__);
+	printk("count bytes %d \n", count);
 	for (i = 0; i < count; ++i)
-		printk("%02x ", buffer[i]);
+		printk("%x", buffer[i]);
 	printk("\n");
 	retval = count;
 		
@@ -642,7 +653,7 @@ static int __init tiny_init(void)
 		tiny->port.ops = &tiny_port_ops;
 	}
 
-	printk(KERN_INFO "ttyRM .n..");
+	printk(KERN_INFO "ttyRM ...");
 
 		//for (i = 0; i < TINY_TTY_MINORS; ++i) 
 		//{
