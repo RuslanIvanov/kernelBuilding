@@ -302,10 +302,10 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 	{
 		printk("bytes[%d]:\n",i);
 
+		tiny->indexIn+=i;
+
 		for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x", tiny->bufferIn[ii]); }
 		printk("\n");
-
-		tiny->indexIn+=i;
 
 		printk("all bytes in buf %d: \n",tiny->indexIn);
 	} else {	printk("buf is full\n"); }
