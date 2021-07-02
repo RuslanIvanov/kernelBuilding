@@ -48,7 +48,7 @@ MODULE_LICENSE("GPL");
 #define TINY_TTY_MAJOR		0	/* experimental range */
 #define TINY_TTY_MINORS		4	/* only have 4 devices */
 
-#define TINY_MAX_BUF 8024
+#define TINY_MAX_BUF 120024
 
 struct tiny_serial 
 {
@@ -258,6 +258,7 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 {//по 255 байт
 	struct tiny_serial *tiny = tty->driver_data;
 	int i;
+	int ii;
 	int retval;
 	struct tty_port *port;
 	unsigned long flags;
@@ -299,15 +300,17 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 
 	if(tiny->indexIn<TINY_MAX_BUF)
 	{
-		tiny->indexIn+=i;
-		printk("bytes in buf %d: \n",tiny->indexIn);
-	}else {	printk("buf is full\n"); }
+		printk("bytes[%d]:\n",i);
 
-	for (i = 0; i <  tiny->indexIn; ++i)
-	{
-		printk("%x", tiny->bufferIn[i]);
-	}
-	printk("\n");
+		for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x", tiny->bufferIn[ii]); }
+		printk("\n");
+
+		tiny->indexIn+=i;
+
+		printk("all bytes in buf %d: \n",tiny->indexIn);
+	} else {	printk("buf is full\n"); }
+
+	
 
 	retval = count;
 		
