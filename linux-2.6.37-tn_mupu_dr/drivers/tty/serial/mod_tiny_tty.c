@@ -48,6 +48,8 @@ MODULE_LICENSE("GPL");
 #define TINY_TTY_MAJOR		0	/* experimental range */
 #define TINY_TTY_MINORS		4	/* only have 4 devices */
 
+#define TINY_MAX_BUF 8024
+
 struct tiny_serial 
 {
 	struct tty_port	port;		/* pointer to the tty for this device */
@@ -63,10 +65,12 @@ struct tiny_serial
 	wait_queue_head_t	wait;
 	struct async_icount	icount;
 
-	unsigned char bufferIn[8024];
-	unsigned char bufferOut[8024];
-	unsigned short indexIn;
-	unsigned short indexOut;
+	unsigned char bufferIn[TINY_MAX_BUF];
+	unsigned char bufferOut[TINY_MAX_BUF];
+
+	int indexIn;
+	int indexOut;
+	unsigned int session;
 };
 
 static struct tiny_serial *tiny_table[TINY_TTY_MINORS];	/* initially all NULL */
@@ -165,7 +169,6 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 
 	//timer_setup(&tiny->timer, tiny_timer, 0);
 
-
 	#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
     init_timer(&tiny->timer);
     tiny->timer.data = (unsigned long)tiny;
@@ -187,7 +190,8 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
  * The port is being closed by the last user.
  * Do any hardware specific stuff here *
  */
-static void tiny_shutdown(struct tty_port *tport){
+static void tiny_shutdown(struct tty_port *tport)
+{
 	struct tiny_serial *tiny;
 
 	tiny = container_of(tport, struct tiny_serial, port);
@@ -214,15 +218,19 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 	port = &tiny->port;
 
-	port->indexIn=0;
-	port->indexOut=0;
+	tiny->indexIn=0;
+	tiny->indexOut=0;
+	tiny->session++;
 
 	status = tty_port_open(port, tty, file);
 
-	if(!status) {
+	if(!status) 
+	{
 		/* save our structure within the tty structure */
 		tty->driver_data = tiny;
 	}
+
+	printk("open session %d\n",tiny->session);
 
 	return status;
 }
@@ -233,7 +241,14 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 	struct tiny_serial *tiny = tty->driver_data;
 	struct tty_port *port;
 
+
+	printk("tiny_close session %d\n",tiny->session);
+
 	port = &tiny->port;
+
+	tiny->indexIn=0;
+	tiny->indexOut=0;
+	tiny->session=0;
 
 	if (tiny)
 		tty_port_close(port, tty, file);
@@ -265,18 +280,40 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 	/* fake sending the data out a hardware port by
 	 * writing it to the kernel debug log.
 	 */
-
-
 	
 	printk(KERN_DEBUG "%s - ", __FUNCTION__);
-	printk("count bytes %d \n", count);
+
+	printk("session %d: count bytes apply %d: \n",tiny->session,count);
+
 	for (i = 0; i < count; ++i)
-		printk("%x", buffer[i]);
+	{
+//			printk("%x", buffer[i]);
+
+			if(((tiny->indexIn)+i) < TINY_MAX_BUF )
+			{
+				tiny->bufferIn[i+(tiny->indexIn)] = buffer[i];
+			}
+			
+	}
 	printk("\n");
+
+	if(tiny->indexIn<TINY_MAX_BUF)
+	{
+		tiny->indexIn+=i;
+		printk("bytes in buf %d: \n",tiny->indexIn);
+	}else {	printk("buf is full\n"); }
+
+	for (i = 0; i <  tiny->indexIn; ++i)
+	{
+		printk("%x", tiny->bufferIn[i]);
+	}
+	printk("\n");
+
 	retval = count;
 		
 exit:
 	mutex_unlock(&tiny->port_write_mutex);
+
 	return retval;
 }
 
@@ -284,6 +321,7 @@ static int tiny_write_room(struct tty_struct *tty)
 {
 	struct tiny_serial *tiny = tty->driver_data;
 	int room = -EINVAL;
+	int i;
 	struct tty_port *port;
 	unsigned long flags;
 
@@ -301,8 +339,19 @@ static int tiny_write_room(struct tty_struct *tty)
 	}
 	spin_unlock_irqrestore(&port->lock, flags);
 
+	//printk("\n\nsession %d\n",tiny->session); 
+	//for (i = 0; i <  tiny->indexIn; ++i)
+	//{
+	//	printk("%x", tiny->bufferIn[i]);
+	//}
+	//printk("\n"); 
 	/* calculate how much room is left in the device */
-	room = 255;
+	//room = 255;
+
+	room = (TINY_MAX_BUF - tiny->indexIn);
+	room = (room>=0)?room:0;
+
+	printk("write_room: tail buf %d bytes, writed %d bytes", room,tiny->indexIn);
 
 exit:
 	mutex_unlock(&tiny->port_write_mutex);
@@ -320,11 +369,12 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 	cflag = tty->termios->c_cflag;
 
 	/* check that they really want us to change something */
-	if (old_termios) {
+	if (old_termios) 
+	{
 		if ((cflag == old_termios->c_cflag) &&
 		    (RELEVANT_IFLAG(tty->termios->c_iflag) ==
 		     RELEVANT_IFLAG(old_termios->c_iflag))) {
-			printk(KERN_DEBUG " - nothing to change...\n");
+			printk(KERN_DEBUG "termios - nothing to change...\n");
 			return;
 		}
 	}
@@ -370,7 +420,8 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 	/* determine software flow control */
 	/* if we are implementing XON/XOFF, set the start and 
 	 * stop character in the device */
-	if (I_IXOFF(tty) || I_IXON(tty)) {
+	if (I_IXOFF(tty) || I_IXON(tty)) 
+	{
 		unsigned char stop_char  = STOP_CHAR(tty);
 		unsigned char start_char = START_CHAR(tty);
 
@@ -602,10 +653,13 @@ static int __init tiny_init(void)
 	int retval;
 	int i;
 	int error;
+	
+	struct tiny_serial *tiny;
+
+	printk(KERN_INFO "tiny_init");
 
 	i=0; retval = 0;
-	error =0;
-	struct tiny_serial *tiny;
+	error =0;	
 
 	/* allocate the tty driver */
 	tiny_tty_driver = alloc_tty_driver(TINY_TTY_MINORS);
@@ -614,15 +668,15 @@ static int __init tiny_init(void)
 
 	/* initialize the tty driver */
 	tiny_tty_driver->owner = THIS_MODULE;
-	tiny_tty_driver->driver_name = "tty_BRM";
-	tiny_tty_driver->name = "ttyBR";
+	tiny_tty_driver->driver_name = "tty_BRM";//Имя драйвера, используемое в /proc/tty и sysfs
+	tiny_tty_driver->name = "ttyBR";// Имя узла драйвера.
 //	tiny_tty_driver->devfs_name = "tts/tttBR%d";
 	tiny_tty_driver->major = TINY_TTY_MAJOR,
 	tiny_tty_driver->type = TTY_DRIVER_TYPE_SERIAL,
 	tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
 	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV*/, //TTY_DRIVER_NO_DEVFS
 	tiny_tty_driver->init_termios = tty_std_termios;
-	tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+	tiny_tty_driver->init_termios.c_cflag = B115200 | CS8 | CREAD | HUPCL | CLOCAL;
 	tty_set_operations(tiny_tty_driver, &serial_ops);
 
 	/* register the tty driver *///При вызове tty_register_driver ядро создаёт в sysfs все различные tty файлы на весь
@@ -648,31 +702,14 @@ static int __init tiny_init(void)
 
 		mutex_init(&tiny->port_write_mutex);
 
+		tiny->indexIn=0;
+		tiny->indexOut=0;
+		tiny->session=0;
+
 		tiny_table[i] = tiny;
 		tty_port_init(&tiny->port);
 		tiny->port.ops = &tiny_port_ops;
 	}
-
-	printk(KERN_INFO "ttyRM ...");
-
-		//for (i = 0; i < TINY_TTY_MINORS; ++i) 
-		//{
-		//	tty_port_register_device(&tiny_table[i]->port, tiny_tty_driver, i, NULL);//??
-
-			//struct device *tty_register_device(struct tty_driver *driver,  unsigned index, struct device *dev);
-
-	//	}
-
-	/* for (i = 0; i < TINY_TTY_MINORS; ++i)
-	 {
-		 error = tty_register_device(tiny_tty_driver, i, NULL);
-		
-		 if(error)
-		 { 	
-			printk(KERN_ERR "TINY: Couldn't register devices, error = %xh (%d)\n",error,error);
-		 }
-	 }*/
-
 
 	printk(KERN_INFO DRIVER_DESC " " DRIVER_VERSION "\n");
 	return retval;
@@ -696,6 +733,8 @@ static void __exit tiny_exit(void)
 {
 	struct tiny_serial *tiny;
 	int i;
+
+	printk(KERN_INFO "tiny_exit");
 
 	for (i = 0; i < TINY_TTY_MINORS; ++i)
 		tty_unregister_device(tiny_tty_driver, i);

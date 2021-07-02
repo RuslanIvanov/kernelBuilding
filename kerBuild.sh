@@ -14,7 +14,7 @@ threads=`expr ${threads}`
 
 WORK_DIR=$PWD
 echo "WORK_DIR: '$WORK_DIR'"
-sleep 5
+sleep 1
 
 
 if [ Y$2 = Y ]
@@ -27,12 +27,12 @@ kernel=$2
 KERNEL_PATH=${WORK_DIR}/$kernel
 
 echo "kernel: '$kernel'"
-sleep 5
+sleep 1
 
 target_os=linux
 
 echo "terget os: $target_os"
-sleep 5
+sleep 1
 
 if [ ${target_os} = "linux" ]
 then
@@ -60,25 +60,25 @@ case "${target}" in
 tam3517)
 	defconfig=tam3517_defconfig
 	echo "usage tam3517_defconfig"
-	sleep 5
+	sleep 1
 ;;
 
 tam3517_upum6)
 	defconfig=./tam3517_upum6_defconfig
 	echo "usage tam3517_upum6_defconfig"
-	sleep 5
+	sleep 1
 ;;
 
 tam3517_upum6Timer)
 	defconfig=tam3517_upum6Timer_defconfig
         echo "usage tam3517_upum6Timer_defconfig"
-        sleep 5
+        sleep 1
 ;;
 
 no_config)
         echo "no configure"
 	defconfig=""
-        sleep 5
+        sleep 1
 ;;
 
 *)
