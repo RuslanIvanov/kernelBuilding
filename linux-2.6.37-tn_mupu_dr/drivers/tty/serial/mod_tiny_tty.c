@@ -269,6 +269,7 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 
 	port = &tiny->port;
 	spin_lock_irqsave(&port->lock, flags);
+
 	if (!port->count) 
 	{
 		spin_unlock_irqrestore(&port->lock, flags);
@@ -276,6 +277,7 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 		retval = -EINVAL;
 		goto exit;
 	}
+
 	spin_unlock_irqrestore(&port->lock, flags);
 
 	/* fake sending the data out a hardware port by
@@ -300,18 +302,17 @@ static int tiny_write(struct tty_struct *tty, const unsigned char *buffer, int c
 
 	if(tiny->indexIn<TINY_MAX_BUF)
 	{
-		printk("bytes[%d]:\n",i);
+		printk("bytes[%d]\n",i);
+
+		for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x.", tiny->bufferIn[ii]); }
 
 		tiny->indexIn+=i;
 
-		for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x", tiny->bufferIn[ii]); }
 		printk("\n");
 
 		printk("all bytes in buf %d: \n",tiny->indexIn);
 	} else {	printk("buf is full\n"); }
-
 	
-
 	retval = count;
 		
 exit:
@@ -502,12 +503,12 @@ static int  tiny_tty_proc_show(struct seq_file *m, void *v)
 	int i;
 
 	seq_printf(m, "tinyserinfo:1.0 driver:%s\n", DRIVER_VERSION);
-	for (i = 0; i < TINY_TTY_MINORS; ++i) {
+	/*for (i = 0; i < TINY_TTY_MINORS; ++i) {
 		tiny = tiny_table[i];
 		if (tiny == NULL)
 			continue;
 		seq_printf(m, "%d\n", i);
-	}
+	}*/
 	return 0;
 }
 
@@ -620,13 +621,14 @@ static int tiny_ioctl(struct tty_struct *tty,
 static int tiny_ioctl(struct tty_struct *tty,
                       unsigned int cmd, unsigned long arg)
 {
-	switch (cmd) {
-	case TIOCGSERIAL:
-		return tiny_ioctl_tiocgserial(tty, cmd, arg);
-	case TIOCMIWAIT:
-		return tiny_ioctl_tiocmiwait(tty, cmd, arg);
-	case TIOCGICOUNT:
-		return tiny_ioctl_tiocgicount(tty, cmd, arg);
+	switch (cmd) 
+	{
+		case TIOCGSERIAL:
+			return tiny_ioctl_tiocgserial(tty, cmd, arg);
+		case TIOCMIWAIT:
+			return tiny_ioctl_tiocmiwait(tty, cmd, arg);
+		case TIOCGICOUNT:
+			return tiny_ioctl_tiocgicount(tty, cmd, arg);
 	}
 
 	return -ENOIOCTLCMD;
