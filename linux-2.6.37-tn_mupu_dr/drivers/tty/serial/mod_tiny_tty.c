@@ -131,10 +131,15 @@ static void tiny_timer(struct timer_list* arg)
 	struct tiny_serial *tiny = from_timer(tiny, arg, timer);
 #endif
 
-	struct tty_port *port;
+	struct tty_port *port;	
 	int i;
-	char data[1] = {TINY_DATA_CHARACTER};
-	int data_size = 1;
+	char data[10];//{TINY_DATA_CHARACTER};
+	int data_size;
+
+    data_size = 7;
+	strcpy(data,"Hello");
+
+	printk(KERN_INFO "\ntiny_timer\n");
 
 	if (!tiny)
 		return;
@@ -146,9 +151,14 @@ static void tiny_timer(struct timer_list* arg)
 	/* FIXME: when data_size increase,
 	 * we need to call tty_flip_buffer_push during tty_insert_flip_char */
 	tty_buffer_request_room(port, data_size);
-	for (i = 0; i < data_size; ++i) {
+	for (i = 0; i < data_size; ++i) 
+	{
 		tty_insert_flip_char(port, data[i], TTY_NORMAL);
 	}
+
+
+	printk(KERN_INFO "\ntiny_timer: tty_flip_buffer_push\n");
+
 	tty_flip_buffer_push(port);
 
 	/* resubmit the timer again */
@@ -165,6 +175,8 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 	struct tiny_serial *tiny;
 	struct timer_list *timer;
 
+	printk(KERN_INFO "\ntiny_activate\n");
+	
 	tiny = container_of(tport, struct tiny_serial, port);
 
 	//timer_setup(&tiny->timer, tiny_timer, 0);
@@ -183,6 +195,9 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 
 	tiny->timer.expires = jiffies + DELAY_TIME;
 	add_timer(&tiny->timer);
+		
+	printk(KERN_INFO "\ntiny_activate: add timer\n");
+
 	return 0;
 }
 
@@ -193,6 +208,8 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 static void tiny_shutdown(struct tty_port *tport)
 {
 	struct tiny_serial *tiny;
+
+	printk(KERN_INFO "\ntiny_shutdown\n");
 
 	tiny = container_of(tport, struct tiny_serial, port);
 
@@ -502,15 +519,63 @@ static int  tiny_tty_proc_show(struct seq_file *m, void *v)
 	struct tiny_serial *tiny;
 	int i;
 
-	seq_printf(m, "tinyserinfo:1.0 driver:%s\n", DRIVER_VERSION);
-	/*for (i = 0; i < TINY_TTY_MINORS; ++i) {
+	seq_printf(m, "<tinyserinfo:1.0 driver:%s>\n", DRIVER_VERSION);
+
+	for (i = 0; i < TINY_TTY_MINORS; ++i) 
+	{
+		tiny = tiny_table[i];
+
+		if (tiny == NULL)
+		{
+			printk("\n#device %d  is out, session %d",tiny->session); 
+			continue;
+		}
+
+		seq_printf(m, "%d\n", i);
+
+		printk("\nsession %d,",tiny->session); 
+		printk(" N %d\n",tiny->indexIn);
+		for (i = 0; i <  tiny->indexIn; ++i)
+		{
+			printk("%x", tiny->bufferIn[i]);
+		}
+		printk("\n"); 
+	
+	}
+	return 0;
+}
+
+/*
+
+static int tiny_read_proc(char *page, char **start, off_t off, int count,
+                          int *eof, void *data)
+{
+	struct tiny_serial *tiny;
+	off_t begin = 0;
+	int length = 0;
+	int i;
+
+	length += sprintf(page, "tinyserinfo:1.0 driver:%s\n", DRIVER_VERSION);
+	for (i = 0; i < TINY_TTY_MINORS && length < PAGE_SIZE; ++i) {
 		tiny = tiny_table[i];
 		if (tiny == NULL)
 			continue;
-		seq_printf(m, "%d\n", i);
-	}*/
-	return 0;
-}
+
+		length += sprintf(page+length, "%d\n", i);
+		if ((length + begin) > (off + count))
+			goto done;
+		if ((length + begin) < off) {
+			begin += length;
+			length = 0;
+		}
+	}
+	*eof = 1;
+done:
+	if (off >= (length + begin))
+		return 0;
+	*start = page + (off-begin);
+	return (count < begin+length-off) ? count : begin + length-off;
+}//*/
 
 #define tiny_ioctl tiny_ioctl_tiocgserial
 static int tiny_ioctl(struct tty_struct *tty,
@@ -684,6 +749,8 @@ static int __init tiny_init(void)
 	tiny_tty_driver->init_termios.c_cflag = B115200 | CS8 | CREAD | HUPCL | CLOCAL;
 	tty_set_operations(tiny_tty_driver, &serial_ops);
 
+	//tiny_tty_driver->read_proc = tiny_read_proc;
+
 	/* register the tty driver *///При вызове tty_register_driver ядро создаёт в sysfs все различные tty файлы на весь
 	//диапазон младших номеров tty устройств, которые может иметь этот tty драйвер
 	retval = tty_register_driver(tiny_tty_driver);
@@ -764,3 +831,44 @@ static void __exit tiny_exit(void)
 
 module_init(tiny_init);
 module_exit(tiny_exit);
+
+/*
+Нет функции read?
+
+Только с этими функциями драйвер tiny_tty может быть зарегистрирован, узел устройства открыт, данные записаны в устройство, узел устройства закрыт и отменена регистрация драйвера и он выгружен из ядра. Но ядро tty и структура tty_driver не предоставляет функцию чтения; в других словах, не существует функции обратного вызова для получения данных из драйвера ядром tty.
+
+ 
+
+Вместо обычной функции чтения, за отправку в ядро tty любых данных, полученных от оборудования, несёт ответственность tty драйвер, когда он их получает. Ядро tty буферизует эти данные, пока они не запрошены пользователем. Поскольку ядро tty предоставляет логику буферизации, каждому tty драйверу нет необходимости реализовывать свою собственную логику буферизации. Ядро tty уведомляет tty драйвер, когда пользователь хочет, чтобы драйвер остановил и начал передачу данных, но если внутренние буферы tty полны, такого уведомления не происходит.
+
+ 
+
+Ядро tty буферизует данные, полученные tty драйверами в структуре, названной struct tty_flip_buffer. Переключаемый буфер является структурой, которая содержит два основных массива данных. Данные, полученные от tty устройства хранятся в первом массиве. Когда этот массив полон, любой пользователь, ожидающий данные, уведомляется, что данные доступны для чтения. Хотя пользователь читает данные из этого массива, любые новые входящие данные хранятся во втором массиве. Когда этот массив заполнен, данные вновь сбрасываются пользователю, а драйвер начинает заполнять первый массив. По сути, принятые данные "переключаются" с одного буфера в другой, в надежде не переполнить их обоих. Чтобы попытаться предотвратить потерю данных, tty драйвер может контролировать, насколько велик входной массив, и если он заполнится, приказать tty драйверу очистить переключаемый буфер в этот момент времени, а не ожидать следующего шанса.
+
+ 
+
+Детали структуры struct tty_flip_buffer не имеют значения для tty драйвера за с одним исключением, переменной count. Эта переменная содержит сколько байт в настоящее время остаётся в буфере, который используется для приёма данных. Если это значение равно значению TTY_FLIPBUF_SIZE, буфер необходимо сбросить пользователю вызовом tty_flip_buffer_push. Это показано следующим фрагментом кода:
+
+ 
+
+for (i = 0; i < data_size; ++i) {
+
+    if (tty->flip.count >= TTY_FLIPBUF_SIZE)
+
+        tty_flip_buffer_push(tty);
+
+    tty_insert_flip_char(tty, data[i], TTY_NORMAL);
+
+}
+
+tty_flip_buffer_push(tty);
+
+ 
+
+Символы, полученные от tty драйвера для отправки пользователю, добавляются в переключаемый буфер вызовом tty_insert_flip_char. Первым параметром этой функции является struct tty_struct, где должны быть сохранены данные, вторым параметром является символ для сохранения и третьим параметром являются любые флаги, которые должны быть установлены для этого символа. Значение флагов должно быть установлено в TTY_NORMAL, если получен обычный символ. Если это особый тип символа, указывающий на ошибку передачу данных, оно должно быть установлено на TTY_BREAK, TTY_FRAME, TTY_PARITY или TTY_OVERRUN, в зависимости от ошибки.
+
+ 
+
+Для того, чтобы "протолкнуть" данные пользователю, выполняется вызов tty_flip_buffer_push. Этот функция должна быть также вызвана, если переключаемый буфера близок к переполнению, как показано в этом примере. Поэтому, когда данные добавляются в переключаемый буфер, или когда переключаемый буфер заполнен, tty драйвер должен вызвать tty_flip_buffer_push. Если tty драйвер может принимать данные на очень высоких скоростях, должен быть установлен флаг tty->low_latency, что приводит при вызове к немедленному вызову tty_flip_buffer_push. В противном случае, вызов tty_flip_buffer_push планирует себя для выталкивания данных из буфера когда-то позднее в ближайшем будущем.
+Предыдущая  Содержание  Следующая
+*/
