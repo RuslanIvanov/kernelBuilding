@@ -42,11 +42,11 @@ MODULE_AUTHOR( DRIVER_AUTHOR );
 MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_LICENSE("GPL");
 
-#define DELAY_TIME		HZ * 2	/* 2 seconds per character */
+#define DELAY_TIME		HZ * 2 	/* 2 seconds per character */
 #define TINY_DATA_CHARACTER	't'
 
-#define TINY_TTY_MAJOR		0	/* experimental range */
-#define TINY_TTY_MINORS		4	/* only have 4 devices */
+#define TINY_TTY_MAJOR		252	/* experimental range */
+#define TINY_TTY_MINORS		1	/* only have 4 devices */
 
 #define TINY_MAX_BUF 120024
 
@@ -136,7 +136,9 @@ static void tiny_timer(struct timer_list* arg)
 	char data[10];//{TINY_DATA_CHARACTER};
 	int data_size;
 
-    data_size = 7;
+	printk(KERN_INFO "\ntiny_timer: start...\n");
+
+    data_size = 6;
 	strcpy(data,"Hello");
 
 	printk(KERN_INFO "\ntiny_timer\n");
@@ -179,24 +181,37 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 	
 	tiny = container_of(tport, struct tiny_serial, port);
 
-	//timer_setup(&tiny->timer, tiny_timer, 0);
-
 	#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+
     init_timer(&tiny->timer);
+
+	tiny->timer.expires = jiffies + DELAY_TIME;
     tiny->timer.data = (unsigned long)tiny;
     tiny->timer.function = tiny_timer;
     /* ... */
     add_timer(&tiny->timer);
-	#else
-    timer_setup(&tiny->timer, tiny_timer, 0);
-    /* the third argument may include TIMER_* flags */
-    /* ... */
-	#endif
 
-	tiny->timer.expires = jiffies + DELAY_TIME;
-	add_timer(&tiny->timer);
+	printk(KERN_INFO "\ntiny_activate: add timer OLD KERNEL\n");
+
+	#else
+
+	//init_timer(&tiny->timer);
+
+   // tiny->timer.data = (unsigned long)tiny;
+	//tiny->timer.expires = jiffies + DELAY_TIME;
+  //  tiny->timer.function = tiny_timer;
+
+	timer_setup(&tiny->timer, tiny_timer, 0);
+    tiny->timer.expires = jiffies + DELAY_TIME;
+    add_timer(&tiny->timer);
+
+	/* the third argument may include TIMER_* flags */
+    /* ... */
+
+	printk(KERN_INFO "\ntiny_activate: add timer NEW KERNEL\n");
+	#endif
 		
-	printk(KERN_INFO "\ntiny_activate: add timer\n");
+
 
 	return 0;
 }
@@ -725,8 +740,8 @@ static int __init tiny_init(void)
 	int error;
 	
 	struct tiny_serial *tiny;
-
-	printk(KERN_INFO "tiny_init");
+	
+	pr_info("%s %s\n", __func__,__TIME__);
 
 	i=0; retval = 0;
 	error =0;	
