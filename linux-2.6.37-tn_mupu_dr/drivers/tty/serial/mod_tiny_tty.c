@@ -45,7 +45,7 @@ MODULE_LICENSE("GPL");
 #define DELAY_TIME		HZ * 2 	/* 2 seconds per character */
 #define TINY_DATA_CHARACTER	't'
 
-#define TINY_TTY_MAJOR		252	/* experimental range */
+#define TINY_TTY_MAJOR		752	/* experimental range */
 #define TINY_TTY_MINORS		1	/* only have 4 devices */
 
 #define TINY_MAX_BUF 120024
@@ -775,7 +775,7 @@ static int __init tiny_init(void)
 		goto err_tty_register_driver;
 	}
 
-	printk(KERN_ERR "ttyRM: register success. major=%d", tiny_tty_driver->major);
+	printk(KERN_ERR "ttyBR: register success. major=%d", tiny_tty_driver->major);
 
 	for (i = 0; i < TINY_TTY_MINORS; ++i) 
 	{

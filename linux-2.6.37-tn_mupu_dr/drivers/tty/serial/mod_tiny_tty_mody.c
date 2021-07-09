@@ -43,13 +43,21 @@ UPDATE: первая проблема (частично) решена с пом�
 #include <asm/uaccess.h>
 #include <linux/kthread.h>
 #include <linux/jiffies.h>
+#include <linux/delay.h>
+#include <linux/termios.h>
+#include <linux/version.h>
+#include <linux/ioctl.h>
+#include <linux/serial.h>
+//#include <pthread.h>
 
 #define USE_SIMULATOR
 
 #define DELAY_TIME      HZ * 2  /* 2 seconds per character */
 
-#define TINY_TTY_MAJOR      252 /* experimental range */
+#define TINY_TTY_MAJOR      752 /* experimental range */
 #define TINY_TTY_MINORS     1   /* only have 4 devices */
+
+#define TINY_MAX_BUF 8000
 
 #if defined(USE_SIMULATOR)
 static struct task_struct *thread_id;
@@ -57,10 +65,18 @@ static wait_queue_head_t wq_thread;
 static DECLARE_COMPLETION(on_exit);
 #endif /* USE_SIMULATOR */
 
-struct tiny_serial {
+struct tiny_serial 
+{
     struct tty_struct   *tty;       /* pointer to the tty for this device */
-    int         open_count;         /* number of times this port has been opened */
+    int    open_count;         /* number of times this port has been opened */
     struct semaphore    sem;        /* locks this structure */
+
+	//unsigned char bufferIn[TINY_MAX_BUF];
+	//unsigned char bufferOut[TINY_MAX_BUF];
+
+	//int indexIn;
+	//int indexOut;
+	//unsigned int session;
 };
 
 static struct tiny_serial *tiny_serial; /* initially all NULL */
@@ -72,45 +88,61 @@ static int tiny_thread(void *thread_data)
     struct tiny_serial *tiny = (struct tiny_serial*)thread_data;
     struct tty_struct *tty;
     struct tty_port *port;
-    char buf[] = "hello world\n";
-    int i = 0;
+
+    char buf[TINY_MAX_BUF];
+    int i;
+	int size_buf;
+
+	i=0; 
+	size_buf=TINY_MAX_BUF;
+	memset(buf,0,TINY_MAX_BUF);
+
+	strcpy(buf,"Hello world");
 
     allow_signal(SIGTERM);    
 
-    pr_info("%s\n", __func__);
+    pr_info("%s %s\n", __func__,__TIME__);
 
+	pr_info("%s, tiny->tty %p\n", tiny->tty);
+	pr_info("%s, tty->port %p\n",tty->port);
+	
     tty = tiny->tty;
     port = tty->port;
 
-    while(kthread_should_stop() == 0)
-    {
-        timeoutMs = 1000;
-        timeoutMs = wait_event_interruptible_timeout(wq_thread, (timeoutMs==0), msecs_to_jiffies(timeoutMs));
+	if(tty && port)
+	{
 
-        if(timeoutMs == -ERESTARTSYS)
-        {
-            pr_info("%s - signal break\n", __func__);
-            up(&tiny->sem);
-            break;
-        }
+		while(kthread_should_stop() == 0)
+		{
+		    timeoutMs = 1000;
+		    timeoutMs = wait_event_interruptible_timeout(wq_thread, (timeoutMs==0), msecs_to_jiffies(timeoutMs));
 
-        pr_info("%s %s\n", __func__,__TIME__);
+		    if(timeoutMs == -ERESTARTSYS)
+		    {
+		        pr_info("%s - signal break\n", __func__);
+		        up(&tiny->sem);
+		        break;
+		    }
 
-        down(&tiny->sem);
+		    pr_info("%s %s\n", __func__,__TIME__);
 
-        if(tiny)
-        {
-            for (i = 0; i < strlen(buf); ++i)
-            {
-                if (!tty_buffer_request_room(tty->port, 1))
-                    tty_flip_buffer_push(tty->port);
-                tty_insert_flip_char(tty->port, buf[i], TTY_NORMAL);
+		    down(&tiny->sem);
 
-            }
-            tty_flip_buffer_push(tty->port);
-        }
-        up(&tiny->sem);
-    }
+		    if(tiny)
+		    {
+		        for (i = 0; i < size_buf; ++i)
+		        {
+		            if (!tty_buffer_request_room(tty->port, 1))
+		                tty_flip_buffer_push(tty->port);
+		            tty_insert_flip_char(tty->port, buf[i], TTY_NORMAL);
+
+		        }
+		        tty_flip_buffer_push(tty->port);
+		    }
+		    up(&tiny->sem);
+		}
+
+	} else {  pr_info("%s: Error NULL pointers...\n", __func__); }
 
     complete_and_exit(&on_exit, 0);
 }
@@ -118,7 +150,7 @@ static int tiny_thread(void *thread_data)
 
 static int tiny_open(struct tty_struct *tty, struct file *file)
 {
-    pr_info("%s\n", __func__);
+     pr_info("%s %s\n", __func__,__TIME__);
 
     /* initialize the pointer in case something fails */
     tty->driver_data = NULL;
@@ -141,13 +173,20 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
     tiny_serial->tty = tty;
 
     ++tiny_serial->open_count;
-    if (tiny_serial->open_count == 1) {
+    if (tiny_serial->open_count == 1) 
+	{
         /* this is the first time this port is opened */
         /* do any hardware initialization needed here */
 #if defined(USE_SIMULATOR)      
         if(thread_id == NULL)
-            thread_id = kthread_create(tiny_thread, (void*)tiny_serial, "tiny_thread");
-        wake_up_process(thread_id); 
+        {
+		    thread_id = kthread_create(tiny_thread, (void*)tiny_serial, "tiny_thread");
+		}
+
+		if(thread_id)
+		{
+	        wake_up_process(thread_id); 
+		}
 #endif /* USE_SIMULATOR */        
     }
 
@@ -157,11 +196,23 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 static void do_close(struct tiny_serial *tiny)
 {
-    pr_info("%s\n", __func__);
+
+    pr_info("%s %s: wait tread...\n", __func__,__TIME__);
+
+    if(thread_id)
+    {
+		 //kthread_join(lwp_t *l);
+
+  	     pr_info("%s %s...OK\n", __func__,__TIME__);
+	}else { pr_info("%s %s...thread id is NULL \n", __func__,__TIME__); }
+	
+
+	mdelay(1000);
 
     down(&tiny->sem);
 
-    if (!tiny->open_count) {
+    if (!tiny->open_count) 
+	{
         /* port was never opened */
         goto exit;
     }
@@ -243,7 +294,8 @@ static int tiny_write_room(struct tty_struct *tty)
 
     down(&tiny->sem);
 
-    if (!tiny->open_count) {
+    if (!tiny->open_count) 
+	{
         /* port was not opened */
         goto exit;
     }
@@ -256,16 +308,98 @@ exit:
     return room;
 }
 
+#define RELEVANT_IFLAG(iflag) ((iflag) & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
+
 static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
-    pr_info("%s\n", __func__);    
+
+	unsigned int cflag;
+
+	 pr_info("%s %s\n", __func__,__TIME__);
+
+	cflag = tty->termios->c_cflag;
+
+	/* check that they really want us to change something */
+	if (old_termios) 
+	{
+		if ((cflag == old_termios->c_cflag) &&
+		    (RELEVANT_IFLAG(tty->termios->c_iflag) ==
+		     RELEVANT_IFLAG(old_termios->c_iflag))) {
+			printk(KERN_DEBUG "termios - nothing to change...\n");
+			return;
+		}
+	}
+
+	/* get the byte size */
+	switch (cflag & CSIZE) {
+		case CS5:
+			printk(KERN_DEBUG " - data bits = 5\n");
+			break;
+		case CS6:
+			printk(KERN_DEBUG " - data bits = 6\n");
+			break;
+		case CS7:
+			printk(KERN_DEBUG " - data bits = 7\n");
+			break;
+		default:
+		case CS8:
+			printk(KERN_DEBUG " - data bits = 8\n");
+			break;
+	}
+	
+	/* determine the parity */
+	if (cflag & PARENB)
+		if (cflag & PARODD)
+			printk(KERN_DEBUG " - parity = odd\n");
+		else
+			printk(KERN_DEBUG " - parity = even\n");
+	else
+		printk(KERN_DEBUG " - parity = none\n");
+
+	/* figure out the stop bits requested */
+	if (cflag & CSTOPB)
+		printk(KERN_DEBUG " - stop bits = 2\n");
+	else
+		printk(KERN_DEBUG " - stop bits = 1\n");
+
+	/* figure out the hardware flow control settings */
+	if (cflag & CRTSCTS)
+		printk(KERN_DEBUG " - RTS/CTS is enabled\n");
+	else
+		printk(KERN_DEBUG " - RTS/CTS is disabled\n");
+	
+	/* determine software flow control */
+	/* if we are implementing XON/XOFF, set the start and 
+	 * stop character in the device */
+	if (I_IXOFF(tty) || I_IXON(tty)) 
+	{
+		unsigned char stop_char  = STOP_CHAR(tty);
+		unsigned char start_char = START_CHAR(tty);
+
+		/* if we are implementing INBOUND XON/XOFF */
+		if (I_IXOFF(tty))
+			printk(KERN_DEBUG " - INBOUND XON/XOFF is enabled, "
+				"XON = %2x, XOFF = %2x", start_char, stop_char);
+		else
+			printk(KERN_DEBUG" - INBOUND XON/XOFF is disabled");
+
+		/* if we are implementing OUTBOUND XON/XOFF */
+		if (I_IXON(tty))
+			printk(KERN_DEBUG" - OUTBOUND XON/XOFF is enabled, "
+				"XON = %2x, XOFF = %2x", start_char, stop_char);
+		else
+			printk(KERN_DEBUG" - OUTBOUND XON/XOFF is disabled");
+	}
+
+	/* get the baud rate wanted */
+	printk(KERN_DEBUG " - baud rate = %d", tty_get_baud_rate(tty));    
 }
 
 static int tiny_install(struct tty_driver *driver, struct tty_struct *tty)
 {
     int retval = -ENOMEM;
 
-    pr_info("%s\n", __func__);
+    pr_info("%s %s\n", __func__,__TIME__);
 
     tty->port = kmalloc(sizeof *tty->port, GFP_KERNEL);
     if (!tty->port)
@@ -293,7 +427,7 @@ static struct tty_operations serial_ops = {
     .write = tiny_write,
     .write_room = tiny_write_room,
     .set_termios = tiny_set_termios,
-    .install        = tiny_install,
+    .install     = tiny_install,
 };
 
 static struct tty_driver *tiny_tty_driver;
@@ -307,6 +441,7 @@ static int __init tiny_init(void)
 #if defined(USE_SIMULATOR)
     init_waitqueue_head(&wq_thread);
     thread_id = NULL;
+	pr_info("USE_SIMULATOR\n");	
 #endif /* USE_SIMULATOR */  
 
     /* allocate the tty driver */
@@ -331,7 +466,8 @@ static int __init tiny_init(void)
 
     /* register the tty driver */
     retval = tty_register_driver(tiny_tty_driver);
-    if (retval) {
+    if (retval) 
+	{
         printk(KERN_ERR "failed to register tiny tty driver");
         put_tty_driver(tiny_tty_driver);
         return retval;
