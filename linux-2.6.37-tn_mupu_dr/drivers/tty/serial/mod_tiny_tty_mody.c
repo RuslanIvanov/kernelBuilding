@@ -54,10 +54,10 @@ UPDATE: первая проблема (частично) решена с пом�
 
 #define DELAY_TIME      HZ * 2  /* 2 seconds per character */
 
-#define TINY_TTY_MAJOR      752 /* experimental range */
+#define TINY_TTY_MAJOR      0 //(752) /* experimental range */
 #define TINY_TTY_MINORS     1   /* only have 4 devices */
 
-#define TINY_MAX_BUF 8000
+#define TINY_MAX_BUF 20000
 
 #if defined(USE_SIMULATOR)
 static struct task_struct *thread_id;
@@ -119,21 +119,29 @@ static int tiny_thread(void *thread_data)
 
 		    if(timeoutMs == -ERESTARTSYS)
 		    {
-		        pr_info("%s - signal break\n", __func__);
+		        pr_err("%s - signal break\n", __func__);
 		        up(&tiny->sem);
 		        break;
 		    }
 
 		    pr_info("%s %s\n", __func__,__TIME__);
 
-		    down(&tiny->sem);
+		    //down(&tiny->sem);
+			if(down_interruptible(&tiny->sem))
+			{
+				 pr_err("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+		 		 return(-EINTR);  /* sleeping has been interrupted by a signal */
+			}
 
 		    if(tiny)
 		    {
+				printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
 		        for (i = 0; i < size_buf; ++i)
 		        {
 		            if (!tty_buffer_request_room(tty->port, 1))
 		                tty_flip_buffer_push(tty->port);
+
+					printk(KERN_ERR "%d.",buf[i]);
 		            tty_insert_flip_char(tty->port, buf[i], TTY_NORMAL);
 
 		        }
@@ -142,7 +150,7 @@ static int tiny_thread(void *thread_data)
 		    up(&tiny->sem);
 		}
 
-	} else {  pr_info("%s: Error NULL pointers...\n", __func__); }
+	} else {  pr_err("%s: Error NULL pointers...\n", __func__); }
 
     complete_and_exit(&on_exit, 0);
 }
@@ -166,7 +174,12 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
         tiny_serial->open_count = 0;
     }
 
-    down(&tiny_serial->sem);
+	if(down_interruptible(&tiny_serial->sem))
+	{
+		 pr_err("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+		 return(-EINTR);  /* sleeping has been interrupted by a signal */
+	}
+	//   down(&tiny_serial->sem);
 
     /* save our structure within the tty structure */
     tty->driver_data = tiny_serial;
@@ -186,7 +199,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 		if(thread_id)
 		{
 	        wake_up_process(thread_id); 
-		}
+		} else { pr_err("%s WAITING...no wake_up_process for reading? thId==NULL\n", __func__); }
 #endif /* USE_SIMULATOR */        
     }
 
@@ -197,19 +210,32 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 static void do_close(struct tiny_serial *tiny)
 {
 
+	int countExit;
+	
+	countExit = 0;
+	
     pr_info("%s %s: wait tread...\n", __func__,__TIME__);
 
     if(thread_id)
     {
 		 //kthread_join(lwp_t *l);
-
   	     pr_info("%s %s...OK\n", __func__,__TIME__);
 	}else { pr_info("%s %s...thread id is NULL \n", __func__,__TIME__); }
 	
-
 	mdelay(1000);
 
     down(&tiny->sem);
+
+//	label1:
+
+//	if(down_interruptible(&tiny->sem))
+//	{
+//		pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+//		countExit++;
+//		if(countExit<10) {  down(&tiny->sem); } else { goto label1; }
+//
+//		 return(-EINTR);  /* sleeping has been interrupted by a signal */
+//	}
 
     if (!tiny->open_count) 
 	{
@@ -247,32 +273,48 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
         do_close(tiny);
 }   
 
-static int tiny_write(struct tty_struct *tty, 
-              const unsigned char *buffer, int count)
+static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int count)
 {
     struct tiny_serial *tiny = tty->driver_data;
     int i;
+
+	pr_info("%s\n", __func__);
+
     int retval = -EINVAL;
 
     if (!tiny)
         return -ENODEV;
 
-    down(&tiny->sem);
+    //down(&tiny->sem);
+	/*
+		функция down(), которая переводит задание в состояние ожидания с флагом TASK_UNINTERRUPTIBLE. 
+		В большинстве случаев это нежелательно, так как процесс, который ожидает на освобождение семафора, 
+		не будет отвечать на сигналы. Поэтому функция down_interruptible() используется значительно более широко,
+		чем функция down().
+	*/
+
+	if(down_interruptible(&tiny->sem))
+	{
+		 pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+		 return(-EINTR);  /* sleeping has been interrupted by a signal */
+	}
 
     if (!tiny->open_count)
+	{
         /* port was not opened */
         goto exit;
+	}
 
     /* fake sending the data out a hardware port by
      * writing it to the kernel debug log.
      */
     printk(KERN_DEBUG "%s - ", __FUNCTION__);
+	printk("count %d:\n",count);
     for (i = 0; i < count; ++i)
     {
-        printk("%02x ", buffer[i]);        
+        printk("%x", buffer[i]);        
     }
     printk("\n");
-
 
 	retval = count;
 
@@ -292,7 +334,12 @@ static int tiny_write_room(struct tty_struct *tty)
     if (!tiny)
         return -ENODEV;
 
-    down(&tiny->sem);
+   // down(&tiny->sem);
+	if(down_interruptible(&tiny->sem))
+	{
+		 pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+		 return(-EINTR);  /* sleeping has been interrupted by a signal */
+	}
 
     if (!tiny->open_count) 
 	{
