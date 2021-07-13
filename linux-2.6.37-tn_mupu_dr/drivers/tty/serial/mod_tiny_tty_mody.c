@@ -68,7 +68,7 @@ static DECLARE_COMPLETION(on_exit);
 struct tiny_serial 
 {
     struct tty_struct   *tty;       /* pointer to the tty for this device */
-    int    open_count;         /* number of times this port has been opened */
+    int  open_count;         /* number of times this port has been opened */
     struct semaphore    sem;        /* locks this structure */
 
 	//unsigned char bufferIn[TINY_MAX_BUF];
@@ -103,8 +103,8 @@ static int tiny_thread(void *thread_data)
 
     pr_info("%s %s\n", __func__,__TIME__);
 
-	pr_info("%s, tiny->tty %p\n", tiny->tty);
-	pr_info("%s, tty->port %p\n",tty->port);
+	pr_info("%s, tiny->tty %p\n",__func__,tiny->tty);
+	pr_info("%s, tty->port %p\n",__func__,tty->port);
 	
     tty = tiny->tty;
     port = tty->port;
@@ -138,14 +138,14 @@ static int tiny_thread(void *thread_data)
 				printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
 		        for (i = 0; i < size_buf; ++i)
 		        {
-		            if (!tty_buffer_request_room(tty->port, 1))
-		                tty_flip_buffer_push(tty->port);
+		            if (!tty_buffer_request_room((struct tty_struct*)tty->port, 1))
+		                tty_flip_buffer_push((struct tty_struct*)tty->port);
 
 					printk(KERN_ERR "%d.",buf[i]);
-		            tty_insert_flip_char(tty->port, buf[i], TTY_NORMAL);
+		            tty_insert_flip_char((struct tty_struct*)tty->port, buf[i], TTY_NORMAL);
 
 		        }
-		        tty_flip_buffer_push(tty->port);
+		        tty_flip_buffer_push((struct tty_struct*)tty->port);
 		    }
 		    up(&tiny->sem);
 		}
@@ -164,7 +164,8 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
     tty->driver_data = NULL;
 
     /* get the serial object associated with this tty pointer */
-    if(tiny_serial == NULL) {
+    if(tiny_serial == NULL) 
+	{
         /* first time accessing this device, let's create it */
         tiny_serial = kmalloc(sizeof(*tiny_serial), GFP_KERNEL);
         if (!tiny_serial)
@@ -275,12 +276,15 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 
 static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int count)
 {
-    struct tiny_serial *tiny = tty->driver_data;
+    struct tiny_serial *tiny;
     int i;
+	int retval;
 
 	pr_info("%s\n", __func__);
 
-    int retval = -EINVAL;
+    retval = -EINVAL;
+
+	tiny = tty->driver_data;
 
     if (!tiny)
         return -ENODEV;
@@ -366,7 +370,7 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 
 	cflag = tty->termios->c_cflag;
 
-	/* check that they really want us to change something */
+	// check that they really want us to change something 
 	if (old_termios) 
 	{
 		if ((cflag == old_termios->c_cflag) &&
@@ -377,7 +381,7 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 		}
 	}
 
-	/* get the byte size */
+	// get the byte size 
 	switch (cflag & CSIZE) {
 		case CS5:
 			printk(KERN_DEBUG " - data bits = 5\n");
@@ -394,7 +398,7 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 			break;
 	}
 	
-	/* determine the parity */
+	// determine the parity 
 	if (cflag & PARENB)
 		if (cflag & PARODD)
 			printk(KERN_DEBUG " - parity = odd\n");
@@ -403,34 +407,34 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 	else
 		printk(KERN_DEBUG " - parity = none\n");
 
-	/* figure out the stop bits requested */
+	// figure out the stop bits requested 
 	if (cflag & CSTOPB)
 		printk(KERN_DEBUG " - stop bits = 2\n");
 	else
 		printk(KERN_DEBUG " - stop bits = 1\n");
 
-	/* figure out the hardware flow control settings */
+	// figure out the hardware flow control settings 
 	if (cflag & CRTSCTS)
 		printk(KERN_DEBUG " - RTS/CTS is enabled\n");
 	else
 		printk(KERN_DEBUG " - RTS/CTS is disabled\n");
 	
-	/* determine software flow control */
-	/* if we are implementing XON/XOFF, set the start and 
-	 * stop character in the device */
+	// determine software flow control 
+	// if we are implementing XON/XOFF, set the start and 
+	// stop character in the device 
 	if (I_IXOFF(tty) || I_IXON(tty)) 
 	{
 		unsigned char stop_char  = STOP_CHAR(tty);
 		unsigned char start_char = START_CHAR(tty);
 
-		/* if we are implementing INBOUND XON/XOFF */
+		// if we are implementing INBOUND XON/XOFF 
 		if (I_IXOFF(tty))
 			printk(KERN_DEBUG " - INBOUND XON/XOFF is enabled, "
 				"XON = %2x, XOFF = %2x", start_char, stop_char);
 		else
 			printk(KERN_DEBUG" - INBOUND XON/XOFF is disabled");
 
-		/* if we are implementing OUTBOUND XON/XOFF */
+		// if we are implementing OUTBOUND XON/XOFF 
 		if (I_IXON(tty))
 			printk(KERN_DEBUG" - OUTBOUND XON/XOFF is enabled, "
 				"XON = %2x, XOFF = %2x", start_char, stop_char);
@@ -438,8 +442,8 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 			printk(KERN_DEBUG" - OUTBOUND XON/XOFF is disabled");
 	}
 
-	/* get the baud rate wanted */
-	printk(KERN_DEBUG " - baud rate = %d", tty_get_baud_rate(tty));    
+	// get the baud rate wanted 
+	printk(KERN_DEBUG " - baud rate = %d", tty_get_baud_rate(tty));   // */
 }
 
 static int tiny_install(struct tty_driver *driver, struct tty_struct *tty)
@@ -449,6 +453,7 @@ static int tiny_install(struct tty_driver *driver, struct tty_struct *tty)
     pr_info("%s %s\n", __func__,__TIME__);
 
     tty->port = kmalloc(sizeof *tty->port, GFP_KERNEL);
+
     if (!tty->port)
         goto err;
 
@@ -502,7 +507,7 @@ static int __init tiny_init(void)
     tiny_tty_driver->name = "ttyBR";
     tiny_tty_driver->major = TINY_TTY_MAJOR,
     tiny_tty_driver->type = TTY_DRIVER_TYPE_SYSTEM,
-    tiny_tty_driver->subtype = SYSTEM_TYPE_CONSOLE,
+    tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
     tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV | TTY_DRIVER_UNNUMBERED_NODE*/,
     tiny_tty_driver->init_termios = tty_std_termios;
 	tiny_tty_driver->init_termios.c_lflag &= ~ECHO;
@@ -525,6 +530,10 @@ static int __init tiny_init(void)
     //tty_register_device(tiny_tty_driver, 0, NULL);
 
     //tiny_install(tiny_tty_driver, tiny_table[0]->tty);
+
+
+	tiny_serial = NULL;
+
     return retval;
 }
 
@@ -544,7 +553,8 @@ static void __exit tiny_exit(void)
     tty_unregister_device(tiny_tty_driver, 0);
     tty_unregister_driver(tiny_tty_driver);
 
-    if (tiny_serial) {
+    if (tiny_serial) 
+	{
         /* close the port */
         while (tiny_serial->open_count)
             do_close(tiny_serial);
