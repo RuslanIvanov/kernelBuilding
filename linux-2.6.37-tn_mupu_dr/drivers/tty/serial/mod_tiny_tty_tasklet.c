@@ -49,7 +49,7 @@ MODULE_LICENSE("GPL");
 #define TINY_TTY_MAJOR		0	/* experimental range */
 #define TINY_TTY_MINORS		1	/* only have 4 devices */
 
-#define TINY_MAX_BUF 20000
+#define TINY_MAX_BUF 120024
 
 #define USE_SIMULATOR
 
@@ -58,6 +58,11 @@ static struct task_struct *thread_id;
 static wait_queue_head_t wq_thread;
 static DECLARE_COMPLETION(on_exit);
 #endif /* USE_SIMULATOR */
+
+#ifdef TASKLET
+void psr_do_tasklet_100(void*);
+DECLARE_TASKLET(psr_tasklet_100, psr_do_tasklet_100, 0);
+#endif
 
 struct tiny_serial 
 {
@@ -87,7 +92,7 @@ struct tiny_serial
 
 static struct tiny_serial *tiny_table[TINY_TTY_MINORS];	/* initially all NULL */
 
-#if defined(USE_SIMULATOR) 
+#if defined(USE_SIMULATOR) || defined(TASKLET)
 static int tiny_thread(void *thread_data)
 {
     unsigned int timeoutMs;
@@ -144,7 +149,7 @@ static int tiny_thread(void *thread_data)
 				printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
 		        for (i = 0; i < size_buf; ++i)
 		        {
-		            if (!tty_buffer_request_room((struct tty_struct*)tty->port, size_buf))
+		            if (!tty_buffer_request_room((struct tty_struct*)tty->port, 1))
 		                tty_flip_buffer_push((struct tty_struct*)tty->port);
 
 					printk(KERN_ERR "%d.",buf[i]);
@@ -162,6 +167,14 @@ static int tiny_thread(void *thread_data)
     complete_and_exit(&on_exit, 0);
 }
 #endif /* USE_SIMULATOR */
+
+
+#ifdef TASKLET
+void psr_do_tasklet_100(void* par)
+{
+    tiny_thread(par);
+}
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static void tiny_timer(unsigned long arg)
@@ -271,8 +284,34 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 	
       		if(thread_id == NULL)
         	{
-				char our_thread[80]="tiny_thread";
-		    	thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread );				
+				// char our_thread[80]="tiny_thread";
+		    	 //thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread );
+
+				#ifdef TASKLET
+		        tasklet_hi_schedule(&psr_tasklet_100);// задача высокого приоритета
+				#endif
+				
+				/*i=0; 
+				size_buf=TINY_MAX_BUF;
+
+				if(tiny)
+		    	{
+					printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
+
+				    for (i = 0; i < size_buf; ++i)
+				    {
+				        if (!tty_buffer_request_room((struct tty_struct*)tty->port, size_buf))
+				            tty_flip_buffer_push((struct tty_struct*)tty->port);
+
+						printk(KERN_ERR "%d.",buf[i]);
+				        tty_insert_flip_char((struct tty_struct*)tty->port, buf[i], TTY_NORMAL);
+						//Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
+
+				    }
+				    tty_flip_buffer_push((struct tty_struct*)tty->port);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
+		    	}	*/		
+
+
 			}
 
 			if(thread_id)
@@ -440,6 +479,11 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 
         }
 		#endif /* USE_SIMULATOR */   
+
+		#ifdef TASKLET
+    	tasklet_disable(&psr_tasklet_100);
+    	tasklet_kill(&psr_tasklet_100);
+		#endif
 	}
 
 exit:

@@ -57,7 +57,7 @@ UPDATE: первая проблема (частично) решена с пом�
 #define TINY_TTY_MAJOR      0 //(752) /* experimental range */
 #define TINY_TTY_MINORS     1   /* only have 4 devices */
 
-#define TINY_MAX_BUF 20000
+#define TINY_MAX_BUF 1500
 
 #if defined(USE_SIMULATOR)
 static struct task_struct *thread_id;
@@ -97,17 +97,21 @@ static int tiny_thread(void *thread_data)
 	size_buf=TINY_MAX_BUF;
 	memset(buf,0,TINY_MAX_BUF);
 
-	strcpy(buf,"Hello world");
+	strcpy(buf,"Hello world!!!");
+	size_buf = strlen("Hello world!!!")+1;
 
     allow_signal(SIGTERM);    
 
     pr_info("%s %s\n", __func__,__TIME__);
 
+	if(tiny)
 	pr_info("%s, tiny->tty %p\n",__func__,tiny->tty);
-	pr_info("%s, tty->port %p\n",__func__,tty->port);
 	
     tty = tiny->tty;
     port = tty->port;
+
+	if(tty)
+	pr_info("%s, tty->port %p\n",__func__,tty->port);
 
 	if(tty && port)
 	{
@@ -138,19 +142,19 @@ static int tiny_thread(void *thread_data)
 				printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
 		        for (i = 0; i < size_buf; ++i)
 		        {
-		            if (!tty_buffer_request_room((struct tty_struct*)tty->port, 1))
-		                tty_flip_buffer_push((struct tty_struct*)tty->port);
+		            if (!tty_buffer_request_room((struct tty_struct*)/*tty->*/port, size_buf))
+		                tty_flip_buffer_push((struct tty_struct*)/*tty->*/port);
 
 					printk(KERN_ERR "%d.",buf[i]);
-		            tty_insert_flip_char((struct tty_struct*)tty->port, buf[i], TTY_NORMAL);
+		            tty_insert_flip_char((struct tty_struct*)/*tty->*/port, buf[i], TTY_NORMAL);
 
 		        }
-		        tty_flip_buffer_push((struct tty_struct*)tty->port);
+		        tty_flip_buffer_push((struct tty_struct*)/*tty->*/port);
 		    }
 		    up(&tiny->sem);
 		}
 
-	} else {  pr_err("%s: Error NULL pointers...\n", __func__); }
+	} else {  pr_err("%s: Error NULL pointers...tty %p port %p\n", __func__,tty ,port );}
 
     complete_and_exit(&on_exit, 0);
 }
@@ -223,9 +227,9 @@ static void do_close(struct tiny_serial *tiny)
   	     pr_info("%s %s...OK\n", __func__,__TIME__);
 	}else { pr_info("%s %s...thread id is NULL \n", __func__,__TIME__); }
 	
+	printk("tiny_close: wait thread ended...\n");
 	mdelay(1000);
-
-    down(&tiny->sem);
+   
 
 //	label1:
 
@@ -244,24 +248,32 @@ static void do_close(struct tiny_serial *tiny)
         goto exit;
     }
 
+	printk("tiny_close count %d (--)\n",tiny->open_count);
+
+	 down(&tiny->sem);
     --tiny->open_count;
-    if (tiny->open_count <= 0) {
+    if (tiny->open_count <= 0) 
+	{
         /* The port is being closed by the last user. */
         /* Do any hardware specific stuff here */   
 
 #if defined(USE_SIMULATOR)
         /* shut down our timer and free the memory */
         if(thread_id)
-        {
+        {wait_for_completion(&on_exit);
+			
             kill_pid(task_pid(thread_id), SIGTERM, 1);
-            wait_for_completion(&on_exit);
+           // wait_for_completion(&on_exit);
             thread_id = NULL;
         }
 #endif /* USE_SIMULATOR */                  
 
     }
+
+	 up(&tiny->sem);
+
 exit:
-    up(&tiny->sem);
+   printk("tiny_close: exit...\n");
 }
 
 static void tiny_close(struct tty_struct *tty, struct file *file)
@@ -543,10 +555,10 @@ static void __exit tiny_exit(void)
 
 #if defined(USE_SIMULATOR)
     if(thread_id)
-    {
+    {wait_for_completion(&on_exit);
         /* shut down our timer and free the memory */
         kill_pid(task_pid(thread_id), SIGTERM, 1);
-        wait_for_completion(&on_exit);
+      //  wait_for_completion(&on_exit);
     }
 #endif /* USE_SIMULATOR */  
 
