@@ -37,7 +37,7 @@
 #include "mod_pvv.h"
 #include "ioctl_pvv5.h"
 
-#define PVV1_DRV_VERSION	"2021-07-15"
+#define PVV1_DRV_VERSION	"2019-10-17"
 #define PVV1_DEVNAME "pvv5"
 #define PVV1_CHDEVNAME "chpvv5"
 #define GPIO_PVV1_DEVICE_DESC   "pvv5_device"
@@ -50,7 +50,7 @@ MODULE_ALIAS("chdriver:pvv5");
 
 static int SUCCESS;
 static int FAIL = -1;
-static int Major = 0;//702;
+static int Major = 702;
 static int Minor = 0;
 static int Device_Status = 0;
 
@@ -61,8 +61,8 @@ static dev_t dev_pvv;
 struct cpvv_dev
 {
         int current_irq;
-		wait_queue_head_t wq;
-		struct mutex mutex;
+	wait_queue_head_t wq;
+	struct mutex mutex;
         struct cdev cdev;
 };
 

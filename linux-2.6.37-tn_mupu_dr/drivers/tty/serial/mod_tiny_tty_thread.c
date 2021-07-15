@@ -51,7 +51,7 @@ MODULE_LICENSE("GPL");
 #define TINY_TTY_MAJOR		0	/* experimental range */
 #define TINY_TTY_MINORS		1	/* only have 4 devices */
 
-#define TINY_MAX_BUF 1500 //20000
+#define TINY_MAX_BUF 20000
 
 #define USE_SIMULATOR
 //#define TASKLET
@@ -67,11 +67,13 @@ void psr_do_tasklet_100(unsigned long );
 DECLARE_TASKLET(psr_tasklet_100, psr_do_tasklet_100, 0);
 #endif
 
+char buf[TINY_MAX_BUF];
+
 struct tiny_serial 
 {
 	struct tty_port	port;		/* pointer to the tty for this device */
 	struct mutex port_write_mutex;
-	//struct timer_list	timer;
+	struct tty_struct   *tty;       /* pointer to the tty for this device */
 
 	/* for tiocmget and tiocmset functions */
 	int			msr;		/* MSR shadow */
@@ -103,30 +105,31 @@ static int tiny_thread(void *thread_data)
     struct tty_struct *tty;
     struct tty_port *port;
 
-    char buf[TINY_MAX_BUF];
+    
     int i;
+	int endRead;
 	int size_buf;
 
-	i=0; 
+	i=0;
+	endRead=0; 
 	tty = NULL; 
 	port =NULL;
-	size_buf=TINY_MAX_BUF;
+	size_buf=0;
 	memset(buf,0,TINY_MAX_BUF);
 
-	strcpy(buf,"Hello world");
-	size_buf=strlen("Hello world")+1;
+	strcpy(buf,"");
 
     allow_signal(SIGTERM);    
 
     pr_info("%s %s\n", __func__,__TIME__);
 
-	pr_info("%s, size_buf %d\n",__func__, size_buf);
+	//pr_info("%s, size_buf %d\n",__func__, size_buf);
 	//pr_info("%s, tty->port %p\n",__func__,tty->port);
 	
-   // tty = tiny->tty;
+    tty = tiny->tty;
     port = &tiny->port;
 
-	if(tiny /*&& tty*/ && port)
+	if(tiny && tty && port)
 	{
 
 		while(kthread_should_stop() == 0)
@@ -141,40 +144,58 @@ static int tiny_thread(void *thread_data)
 		    {
 		        pr_err("%s - signal break\n", __func__);
 		        up(&tiny->sem);
-		        break;
+		        //break;
+				goto BREAK;
 		    }
 
 		    pr_info("%s %s\n", __func__,__TIME__);
 
-		    down(&tiny->sem);
-			/*if(down_interruptible(&tiny->sem))
+		   // down(&tiny->sem);
+			if(down_interruptible(&tiny->sem))
 			{
 				 pr_err("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
-		 		 return(-EINTR);  //sleeping has been interrupted by a signal 
-			}*/
+		 		// return(-EINTR);  //sleeping has been interrupted by a signal 
+			}else
+			{
+		    	if(tiny)
+		   	 	{
+					memcpy(buf,tiny->bufferIn,tiny->indexIn);
+					size_buf = tiny->indexIn;
 
-		    if(tiny)
-		    {
-				printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
-		        for (i = 0; i < size_buf; ++i)
-		        {
-		            //if (!tty_buffer_request_room((struct tty_struct*)/*tty->*/port, size_buf))
-		            //    tty_flip_buffer_push((struct tty_struct*)/*tty->*/port);
+					printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
+		        	for (i = 0; i < size_buf; ++i)
+		        	{
+		          	  	if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
+		           	 	{
+					    	tty_flip_buffer_push((struct tty_struct*)tty);
+							printk(KERN_ERR "#i=%d...exit ",i);
+							endRead=1;
+							break;
+						}
+						
+						printk(KERN_ERR "%x",buf[i]);
+		           	 	tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);
+						//Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
 
-					printk(KERN_ERR "%d.",buf[i]);
-		            tty_insert_flip_char((struct tty_struct*)/*tty->*/port, buf[i], TTY_NORMAL);
-					//Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
+		        	}
 
-		        }
-		        tty_flip_buffer_push((struct tty_struct*)/*tty->*/port);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
-		    }
-		    up(&tiny->sem);
+					if(endRead==0)
+					{
+		        			tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
+							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
+						 	tiny->indexIn = 0;
+					}
+		    	}
+		    	up(&tiny->sem);
 
-			mdelay(2);
+				mdelay(2);
+			}
 		}
 		//*/
 
 	} else {  pr_err("%s: Error NULL pointers...tiny %p tty %p port %p\n", __func__,tiny,tty,port);  }
+
+BREAK:
 
 	pr_err("%s: thread end1\n", __func__);
     complete_and_exit(&on_exit, 0);
@@ -203,7 +224,7 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 	
 	tiny = container_of(tport, struct tiny_serial, port);
 
-	/*if(tiny)
+	if(tiny)
 	{
 
 		#ifdef USE_SIMULATOR
@@ -221,7 +242,7 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 
 		// save our structure within the tty structure 
     	//tty->driver_data = tiny;
-    	//tiny->tty = tty;
+    	tiny->tty = tty;
 
     	++tiny->open_count;
 
@@ -233,7 +254,7 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
         	{
 				printk(KERN_INFO "%s: startr thread\n\n",__func__);	
 				strcpy(&our_thread[0],"tiny_thread");
-			
+				
 				#ifdef TASKLET
 		        	tasklet_hi_schedule(&psr_tasklet_100);// задача высокого приоритета
 				#else
@@ -283,8 +304,8 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 	int index;
 	struct tty_port *port;
 	int status;
-	int size_buf;
-	char our_thread[80];
+	//int size_buf;
+	//char our_thread[80];
 	
 	printk(KERN_INFO "\ntiny[%d] is open\n",tty->index);
 
@@ -312,7 +333,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 	
 	printk("open session %d, status %d\n",tiny->session,status);
 
-	if(tiny)
+	/*if(tiny)
 	{
 
 		#ifdef USE_SIMULATOR
@@ -330,19 +351,19 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 		// save our structure within the tty structure 
     	//tty->driver_data = tiny;
-    	//tiny->tty = tty;
+    	tiny->tty = tty;
 
     	++tiny->open_count;
 
 		 printk(KERN_INFO "tiny_activate: open_count %d\n",tiny->open_count);
     	if (tiny->open_count == 1) 
 		{
-	
+			
       		if(thread_id == NULL)
         	{
 				printk(KERN_INFO "%s: startr thread\n\n",__func__);	
 				strcpy(&our_thread[0],"tiny_thread");
-			
+				
 				#ifdef TASKLET
 		        	tasklet_hi_schedule(&psr_tasklet_100);// задача высокого приоритета
 				#else
@@ -427,7 +448,7 @@ exit:
 
 	port = &tiny->port;
 
-	tiny->indexIn=0;
+	//tiny->indexIn=0;
 	tiny->indexOut=0;
 	tiny->session=0;
 
@@ -893,7 +914,7 @@ static int __init tiny_init(void)
 	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV*/, //TTY_DRIVER_NO_DEVFS
 	tiny_tty_driver->init_termios = tty_std_termios;
 	tiny_tty_driver->init_termios.c_lflag &= ~ECHO;
-	tiny_tty_driver->init_termios.c_cflag = B115200 | CS8 | CREAD | HUPCL | CLOCAL;
+	tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	tty_set_operations(tiny_tty_driver, &serial_ops);
 
 	// register the tty driver 
