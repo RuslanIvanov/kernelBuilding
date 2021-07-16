@@ -177,9 +177,11 @@ static int tiny_thread(void *thread_data)
 						}
 
 						if(endRead==0)
-						{
+						{						
+
 							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
 							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
+							
 							tiny->indexIn = 0;
 						}
 					}
@@ -334,7 +336,7 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 	{
         do_close(tiny);
 
-		tiny->indexIn=0;
+		//tiny->indexIn=0;// возможно убрать, так ка буффер держать до прочтения клиентом
 	}
 }   
 
@@ -599,8 +601,41 @@ static int __init tiny_init(void)
     tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
     tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV | TTY_DRIVER_UNNUMBERED_NODE*/,
     tiny_tty_driver->init_termios = tty_std_termios;
-	//tiny_tty_driver->init_termios.c_lflag &= ~ECHO;
-    tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+	tiny_tty_driver->init_termios.c_lflag &= ~ECHO;
+    tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD /*| HUPCL*/ | CLOCAL;
+
+	////////////////////////////////////////////////////////////////////////////////////
+
+	tiny_tty_driver->init_termios.c_cflag &= ~CSIZE;
+    tiny_tty_driver->init_termios.c_cflag |= CS8;         /* 8-bit characters */
+    tiny_tty_driver->init_termios.c_cflag &= ~PARENB;      /* no enable parity */
+    tiny_tty_driver->init_termios.c_cflag &= ~PARODD;     /* Even parity */
+    tiny_tty_driver->init_termios.c_cflag &= ~CMSPAR;      /* no force Even parity to SPACE */
+    tiny_tty_driver->init_termios.c_cflag &= ~CSTOPB;     /* only need 1 stop bit */
+    tiny_tty_driver->init_termios.c_cflag &= ~CRTSCTS;    /* no hardware flowcontrol */
+
+    tiny_tty_driver->init_termios.c_lflag &= ~(ICANON | ISIG);  /* no canonical input */
+    tiny_tty_driver->init_termios.c_lflag &= ~(ECHO | ECHOE | ECHONL | IEXTEN);
+
+    tiny_tty_driver->init_termios.c_iflag &= ~IGNCR;  /* preserve carriage return */
+    tiny_tty_driver->init_termios.c_iflag &= ~(INLCR | ICRNL | IUCLC | IMAXBEL);
+    tiny_tty_driver->init_termios.c_iflag &= ~(IXON | IXOFF | IXANY);   /* no SW flowcontrol */
+    tiny_tty_driver->init_termios.c_iflag |= IGNBRK;  /* ignore breaks */
+    tiny_tty_driver->init_termios.c_iflag &= ~ISTRIP;
+    tiny_tty_driver->init_termios.c_iflag &= ~IGNPAR; /* report error */
+    tiny_tty_driver->init_termios.c_iflag &= ~INPCK;   /*no test parity */
+    tiny_tty_driver->init_termios.c_iflag &= ~PARMRK;  /*no verbose parity err */
+
+    tiny_tty_driver->init_termios.c_oflag &= ~OPOST;
+
+    tiny_tty_driver->init_termios.c_cc[VEOL] = 0;
+    tiny_tty_driver->init_termios.c_cc[VEOL2] = 0;
+    tiny_tty_driver->init_termios.c_cc[VEOF] = -1;//EOF = -1, EOT (end of transmission) = 0x04;
+
+
+	/////////////////////////////////////////////////////////////////////////////////////	
+
+
     tty_set_operations(tiny_tty_driver, &serial_ops);
 
 
