@@ -65,8 +65,7 @@ static struct task_struct *thread_id;
 static wait_queue_head_t wq_thread;
 static DECLARE_COMPLETION(on_exit);
 #endif /* USE_SIMULATOR */
-static wait_queue_head_t wq_close;
-int wait_queue_flag = 0;
+
 #define DRIVER_VERSION 	"v2.3"
 #define DRIVER_AUTHOR 	"Russl 2021"
 #define DRIVER_DESC 	"Tiny TTY driver on THREAD MODY"
@@ -137,7 +136,7 @@ static int tiny_thread(void *thread_data)
 		    {
 		        pr_err("%s - signal break\n", __func__);
 		        up(&tiny->sem);
-		      
+		       // break; 
 				goto BREAK;
 		    }
 
@@ -177,52 +176,16 @@ static int tiny_thread(void *thread_data)
 
 						}
 
-						if(endRead==0 && size_buf)
+						if(endRead==0)
 						{						
-							//tty_insert_flip_char((struct tty_struct*)tty, -1, TTY_NORMAL);
+
 							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
 							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
 							
-							wait_queue_flag = 2 ;
-							wake_up_interruptible(&wq_close);  
-
-							//tiny->indexIn = 0;
-							
-						}else { 
-								printk(KERN_ERR "send on user = STOP!, bytes %d\n",tiny->indexIn);
-								//tty_buffer_free_all(tty);
-								tty_insert_flip_char((struct tty_struct*)tty, 'S', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'T', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'P', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
-								tty_flip_buffer_push((struct tty_struct*)tty);
-
-								wait_queue_flag = 3 ;
-								wake_up_interruptible(&wq_close);   
-							}
-					}else 
-					{					
-	
-						printk(KERN_ERR "send on user = ERROR!, bytes %d\n",tiny->indexIn);
-
-						//tty_buffer_free_all(tty);
-						tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
-						tty_flip_buffer_push((struct tty_struct*)tty);
-						
-						wait_queue_flag =4;
-						wake_up_interruptible(&wq_close);
+							tiny->indexIn = 0;
+						}
 					}
-
 					up(&tiny->sem);// освобождение семафора
-
-					//wait_queue_flag = 5 ;
-					//wake_up_interruptible(&wq_close);  
 			}
 		}
 
@@ -237,26 +200,22 @@ BREAK:
 static int tiny_open(struct tty_struct *tty, struct file *file)
 {
      pr_info("%s %s\n", __func__,__TIME__);
-
+	
+	
     /* initialize the pointer in case something fails */
-    tty->driver_data = NULL;
+   // tty->driver_data = NULL;//??
 
-	//if(tiny_serial->open_count>=1) return -EBUSY;
-
-    /* get the serial object associated with this tty pointer */
-    if(tiny_serial == NULL) 
+	if(tiny_serial->open_count>=2)
 	{
-        /* first time accessing this device, let's create it */
-        tiny_serial = kmalloc(sizeof(*tiny_serial), GFP_KERNEL);
-        if (!tiny_serial)
-            return -ENOMEM;
 
-        sema_init(&tiny_serial->sem, 1);
-        tiny_serial->open_count = 0;
-		tiny_serial->indexIn=0;	
+		 pr_err("%s WAITING...devices is BUSY\n", __func__);
+		 return -EBUSY;
+	}
 
-		 pr_err("%s INIT TINY ONCE", __func__);	
-    }
+
+	 /* save our structure within the tty structure */
+    tty->driver_data = tiny_serial;
+    tiny_serial->tty = tty;
 
 	if(down_interruptible(&tiny_serial->sem))
 	{
@@ -265,34 +224,24 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 	}
 	//   down(&tiny_serial->sem);
 
-	if((file->f_flags & O_WRONLY) == O_WRONLY )
+	if(file->f_flags & O_WRONLY)
 	{
-			//tiny_serial->indexIn=0;
-		 	pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+		 tiny_serial->indexIn=0;
+		 pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
 	}
-	else if((file->f_flags & O_RDWR)== O_RDWR)
-	{
-			//tiny_serial->indexIn=0;
-			 pr_err("%s O_RDWR indexIn %d \n", __func__,tiny_serial->indexIn);
-
-	}else if((file->f_flags & O_RDONLY) == O_RDONLY )
-	{
-			 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
-	}else {  pr_err("%s OTHER\n", __func__); }
-
-    /* save our structure within the tty structure */
-    tty->driver_data = tiny_serial;
-    tiny_serial->tty = tty;
 
     ++tiny_serial->open_count;
-    if (tiny_serial->open_count == 1) 
+
+    if (/*(tiny_serial->open_count == 1) &&*/ ((file->f_flags & O_RDONLY) || (file->f_flags & O_RDWR) )) 
 	{
         /* this is the first time this port is opened */
         /* do any hardware initialization needed here */
 #if defined(USE_SIMULATOR)      
-        if(thread_id == NULL /*&& (file->f_flags & O_RDONLY) */)
+        if(thread_id == NULL )// и только один поток
         {
 			printk("%s: make thread...\n",__func__);
+
+			 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
 	
 		    thread_id = kthread_create(tiny_thread, (void*)tiny_serial, "tiny_thread");
 
@@ -305,8 +254,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 			mdelay(2);
 
-	        wake_up_process(thread_id);
- 
+	        wake_up_process(thread_id); 
 		} else { pr_err("%s WAITING...no make & up_process for reading(id=%p\n", __func__,thread_id); }
 #endif /* USE_SIMULATOR */        
     }
@@ -317,8 +265,21 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 static void do_close(struct tiny_serial *tiny)
 {
+
+	int countExit;
 	
-	//mdelay(1000);
+	countExit = 0;
+	
+    pr_info("%s %s: wait tread...\n", __func__,__TIME__);
+
+    if(thread_id)
+    {
+		 //kthread_join(lwp_t *l);
+  	     pr_info("%s %s...OK\n", __func__,__TIME__);
+	}else { pr_info("%s %s...thread id is NULL \n", __func__,__TIME__); }
+	
+	printk("tiny_close: wait thread ended...\n");
+	mdelay(1000);
    
 
 //	label1:
@@ -341,8 +302,8 @@ static void do_close(struct tiny_serial *tiny)
 	printk("tiny_close count %d (--)\n",tiny->open_count);
 
 	 down(&tiny->sem);
-    --tiny->open_count;
-    if (tiny->open_count <= 0) 
+  //  --tiny->open_count;
+   // if (tiny->open_count <= 0) 
 	{
         /* The port is being closed by the last user. */
         /* Do any hardware specific stuff here */   
@@ -358,14 +319,10 @@ static void do_close(struct tiny_serial *tiny)
 
 			printk("tiny_close: thread is killed\n");
             thread_id = NULL;
-
-			//tiny->indexIn=0;
         }
 #endif /* USE_SIMULATOR */                  
 
     }
-
-	 tiny->indexIn=0;
 
 	 up(&tiny->sem);
 
@@ -376,25 +333,28 @@ exit:
 static void tiny_close(struct tty_struct *tty, struct file *file)
 {
     struct tiny_serial *tiny ; 
-	
-	tiny = NULL;
 
 	if(tty->driver_data)
-	{
-		tiny = tty->driver_data;
-	}
+	tiny = tty->driver_data;
 
     pr_info("%s\n", __func__);
 
     if (tiny)
 	{
+        
+	    if (tiny->open_count > 0) 
+		{
+			 pr_err("%s CLOSE  %d \n", __func__,tiny->open_count);
+			 --tiny->open_count;
+		}
 
-		pr_info("%s: wait close...",__func__);
-		wait_event_interruptible(wq_close, wait_queue_flag != 0 );
-        pr_info("%s: go to close..%d.",__func__,wait_queue_flag);
-		wait_queue_flag =0;
-        do_close(tiny);
+		if(file->f_flags & O_RDONLY)
+		{
+			//tiny_serial->indexIn=0;
+			 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+		}
 
+		//tiny->indexIn=0;// возможно убрать, так ка буффер держать до прочтения клиентом
 	}
 }   
 
@@ -469,9 +429,7 @@ static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int 
 
 exit:
     up(&tiny->sem);
-	wait_queue_flag =1;
-	wake_up_interruptible(&wq_close);   
-	
+
     return retval;
 }
 
@@ -643,7 +601,6 @@ static int __init tiny_init(void)
 
 #if defined(USE_SIMULATOR)
     init_waitqueue_head(&wq_thread);
-	init_waitqueue_head(&wq_close);
     thread_id = NULL;
 	pr_info("USE_SIMULATOR\n");	
 #endif /* USE_SIMULATOR */  
@@ -663,7 +620,7 @@ static int __init tiny_init(void)
     tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW /*| TTY_DRIVER_DYNAMIC_DEV | TTY_DRIVER_UNNUMBERED_NODE*/,
     tiny_tty_driver->init_termios = tty_std_termios;
 	tiny_tty_driver->init_termios.c_lflag &= ~ECHO;
-    tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+    tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD /*| HUPCL*/ | CLOCAL;
 
 	////////////////////////////////////////////////////////////////////////////////////
 
@@ -676,7 +633,6 @@ static int __init tiny_init(void)
     tiny_tty_driver->init_termios.c_cflag &= ~CRTSCTS;    /* no hardware flowcontrol */
 
     tiny_tty_driver->init_termios.c_lflag &= ~(ICANON | ISIG);  /* no canonical input */
-	//tiny_tty_driver->init_termios.c_lflag |= (ICANON); //ICANON запустить канонический режим. Это означает, что линии используют специальные символы: EOF, EOL, EOL2, ERASE, KILL, LNEXT, REPRINT, STATUS и WERASE, а также строчную буферизацию. 
     tiny_tty_driver->init_termios.c_lflag &= ~(ECHO | ECHOE | ECHONL | IEXTEN);
 
     tiny_tty_driver->init_termios.c_iflag &= ~IGNCR;  /* preserve carriage return */
@@ -692,11 +648,7 @@ static int __init tiny_init(void)
 
     tiny_tty_driver->init_termios.c_cc[VEOL] = 0;
     tiny_tty_driver->init_termios.c_cc[VEOL2] = 0;
-   // tiny_tty_driver->init_termios.c_cc[VEOF] = -1;//0?//EOF = -1, EOT (end of transmission) = 0x04;
-
-	tiny_tty_driver->init_termios.c_cc[VKILL] =  21;
-    tiny_tty_driver->init_termios.c_cc[VEOF] = 4;
-    tiny_tty_driver->init_termios.c_cc[VSTOP] = 19;
+    tiny_tty_driver->init_termios.c_cc[VEOF] = -1;//EOF = -1, EOT (end of transmission) = 0x04;
 
 
 	/////////////////////////////////////////////////////////////////////////////////////	
@@ -718,11 +670,26 @@ static int __init tiny_init(void)
 
 	printk(KERN_ERR "ttyBR: register success. major=%d", tiny_tty_driver->major);
 
-    //tty_register_device(tiny_tty_driver, 0, NULL);
-    //tiny_install(tiny_tty_driver, tiny_table[0]->tty);
+   //////////////////////////////////////////////////////////////////////////////////////
 
-	//tiny_serial->indexIn=0;
 	tiny_serial = NULL;
+    /* get the serial object associated with this tty pointer */
+    if(tiny_serial == NULL) 
+	{
+        /* first time accessing this device, let's create it */
+        tiny_serial = kmalloc(sizeof(*tiny_serial), GFP_KERNEL);
+        if (!tiny_serial)
+            return -ENOMEM;
+
+        sema_init(&tiny_serial->sem, 1);
+        tiny_serial->open_count = 0;
+		tiny_serial->indexIn=0;
+
+		pr_err("%s CREATE tiny_serial %p \n", __func__,tiny_serial);
+		
+    }
+	//////////////////////////////////////////////////////////////////////////////////////
+
 
     return retval;
 }
