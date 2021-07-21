@@ -131,7 +131,7 @@ static void make_answ(void *p)
 
 						printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
 
-						
+						//tty_buffer_request_room((struct tty_struct *)tty, size_buf);
 
 						for (i = 0; i < size_buf; ++i)
 						{
@@ -212,6 +212,12 @@ static int tiny_thread(void *thread_data)
 	endRead = 0;
 	size_buf=0;
 	memset(buf,0,TINY_MAX_BUF);
+
+	//strcpy(buf,"Hello worldddd");
+	//size_buf =  strlen("Hello worldddd")+1;
+	//size_buf=size_buf+size_buf;
+
+	
 
     allow_signal(SIGTERM);    
 
@@ -389,7 +395,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
     tiny_serial->tty = tty;
 
     ++tiny_serial->open_count;
-    if (tiny_serial->open_count <= 1) 
+    if (tiny_serial->open_count == 1) 
 	{
         /* this is the first time this port is opened */
         /* do any hardware initialization needed here */
@@ -413,7 +419,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
  
 		} else { pr_err("%s WAITING...no make & up_process for reading(id=%p\n", __func__,thread_id); }
 #endif /* USE_SIMULATOR */        
-    }else return -EBUSY;
+    }
 
    // up(&tiny_serial->sem);
     return 0;
@@ -566,8 +572,8 @@ exit:
 #else
 	make_answ(tiny);
 
-//	wait_queue_flag =1;
-	//wake_up_interruptible(&wq_close);  
+	wait_queue_flag =1;
+	wake_up_interruptible(&wq_close);  
 #endif	
     return retval;
 }

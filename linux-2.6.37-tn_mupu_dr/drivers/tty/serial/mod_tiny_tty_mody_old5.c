@@ -51,7 +51,7 @@ UPDATE: первая проблема (частично) решена с пом�
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 
-//#define USE_SIMULATOR
+#define USE_SIMULATOR
 
 #define DELAY_TIME      HZ * 2  /* 2 seconds per character */
 
@@ -129,9 +129,15 @@ static void make_answ(void *p)
 						memcpy(buf,tiny->bufferIn,tiny->indexIn);
 						size_buf = tiny->indexIn;
 
-						printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
+						printk(KERN_ERR "%s: apply input bytes %d:\n", __func__,tiny->indexIn);
 
-						
+						/*if(tiny->indexIn)
+						{	
+
+							sprintf(buf,"OK! size = %d",tiny->indexIn);
+							size_buf = strlen(buf);
+							printk(KERN_ERR "%s: send user  bytes %d:\n", __func__,size_buf);
+						}else size_buf = tiny->indexIn;*/
 
 						for (i = 0; i < size_buf; ++i)
 						{
@@ -153,7 +159,7 @@ static void make_answ(void *p)
 						{						
 							//tty_insert_flip_char((struct tty_struct*)tty, VEOF, TTY_BREAK);
 							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
-							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
+							printk(KERN_ERR "#send on user = %d bytes\n",size_buf);
 							
 							//wait_queue_flag = 2 ;
 							//wake_up_interruptible(&wq_close);  
@@ -161,7 +167,7 @@ static void make_answ(void *p)
 							//tiny->indexIn = 0;
 							
 						}else { 
-								printk(KERN_ERR "send on user = STOP!, bytes %d\n",tiny->indexIn);
+								printk(KERN_ERR "send on user = STOP!, size = %d\n",size_buf);
 								//tty_buffer_free_all(tty);
 								tty_insert_flip_char((struct tty_struct*)tty, 'S', TTY_NORMAL);
 								tty_insert_flip_char((struct tty_struct*)tty, 'T', TTY_NORMAL);
@@ -176,7 +182,7 @@ static void make_answ(void *p)
 					}else 
 					{					
 	
-						printk(KERN_ERR "send on user = ERROR!, bytes %d\n",tiny->indexIn);
+						printk(KERN_ERR "send on user = ERROR!, size %d\n",size_buf);
 
 						//tty_buffer_free_all(tty);
 						tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
@@ -566,8 +572,8 @@ exit:
 #else
 	make_answ(tiny);
 
-//	wait_queue_flag =1;
-	//wake_up_interruptible(&wq_close);  
+	wait_queue_flag =1;
+	wake_up_interruptible(&wq_close);  
 #endif	
     return retval;
 }
