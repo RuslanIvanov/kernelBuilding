@@ -54,18 +54,12 @@ MODULE_LICENSE("GPL");
 #define TINY_MAX_BUF 20000
 
 #define USE_SIMULATOR
-//#define TASKLET
 
 #if defined(USE_SIMULATOR)
 static struct task_struct *thread_id;
 static wait_queue_head_t wq_thread;
 static DECLARE_COMPLETION(on_exit);
 #endif /* USE_SIMULATOR */
-
-#ifdef TASKLET
-void psr_do_tasklet_100(unsigned long );
-DECLARE_TASKLET(psr_tasklet_100, psr_do_tasklet_100, 0);
-#endif
 
 char buf[TINY_MAX_BUF];
 
@@ -203,12 +197,6 @@ BREAK:
 }
 #endif /* USE_SIMULATOR */
 
-#ifdef TASKLET
-void psr_do_tasklet_100(unsigned long par)
-{
-    tiny_thread((void*)par);
-}
-#endif
 
 /*
  * this is the first time this port is opened
@@ -255,12 +243,8 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 				printk(KERN_INFO "%s: startr thread\n\n",__func__);	
 				strcpy(&our_thread[0],"tiny_thread");
 				
-				#ifdef TASKLET
-		        	tasklet_hi_schedule(&psr_tasklet_100);// задача высокого приоритета
-				#else
-			    	thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread);	
-				#endif
-						
+				thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread);	
+										
 			} else pr_err("%s WAITING...thread id already yet\n", __func__); 
 
 			if(thread_id)
@@ -279,7 +263,7 @@ static int tiny_activate(struct tty_port *tport, struct tty_struct *tty)
 		up(&tiny->sem);
 		/////////////////////////////////////////////////////////////////////////////////////////////////////
 
-		#endif 
+		
 	} else { pr_err("%s WAITING...error start thread, tiny %p\n", __func__,tiny); printk(KERN_INFO "tiny_activate: WAITING...error start thread, tiny %p\n",tiny); }//*/
 
 	return 0;
@@ -364,11 +348,9 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 				printk(KERN_INFO "%s: startr thread\n\n",__func__);	
 				strcpy(&our_thread[0],"tiny_thread");
 				
-				#ifdef TASKLET
-		        	tasklet_hi_schedule(&psr_tasklet_100);// задача высокого приоритета
-				#else
-			    	thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread);	
-				#endif
+				
+			    thread_id = kthread_create(tiny_thread, (void*)tiny,our_thread);	
+				
 						
 			} else pr_err("%s WAITING...thread id already yet\n", __func__); 
 
@@ -435,11 +417,7 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
 
         }
 		#endif /* USE_SIMULATOR */   
-
-		#ifdef TASKLET
-    	tasklet_disable(&psr_tasklet_100);
-    	tasklet_kill(&psr_tasklet_100);
-		#endif
+	
 	}
 	up(&tiny->sem);	
 	

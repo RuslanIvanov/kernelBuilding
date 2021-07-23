@@ -51,7 +51,7 @@ UPDATE: первая проблема (частично) решена с пом�
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 
-//#define USE_SIMULATOR
+#define USE_THREAD
 
 #define DELAY_TIME      HZ * 2  /* 2 seconds per character */
 
@@ -60,18 +60,18 @@ UPDATE: первая проблема (частично) решена с пом�
 
 #define TINY_MAX_BUF 20000
 
-#if defined(USE_SIMULATOR)
+#if defined(USE_THREAD)
 static struct task_struct *thread_id;
 static wait_queue_head_t wq_thread;
 static DECLARE_COMPLETION(on_exit);
-#endif /* USE_SIMULATOR */
+#endif /* USE_THREAD */
 
 static wait_queue_head_t wq_close;
-int wait_queue_flag = 0;
+int wait_queue_close_flag = 0;
 
-#define DRIVER_VERSION 	"v2.4"
+#define DRIVER_VERSION 	"v2.5"
 #define DRIVER_AUTHOR 	"Russl 2021"
-#define DRIVER_DESC 	"Tiny TTY driver NO THREAD"
+#define DRIVER_DESC 	"Tiny TTY driver WITH THREAD"
 
 struct tiny_serial 
 {
@@ -91,112 +91,7 @@ static struct tiny_serial *tiny_serial; /* initially all NULL */
 
 char buf[TINY_MAX_BUF];
 
-static void make_answ(void *p)
-{
-
-	struct tiny_serial *tiny;
-	struct tty_struct *tty;
-    struct tty_port *port;
-    
-    int i;
-	int size_buf;
-	int endRead;
-	
-	i=0; 
-	endRead = 0;
-	size_buf=0;
-	memset(buf,0,TINY_MAX_BUF);
-
-	tiny = (struct tiny_serial*)p;
-
-    pr_info("%s %s\n", __func__,__TIME__);
-
-	if(tiny)
-	pr_info("%s, tiny->tty %p\n",__func__,tiny->tty);
-	
-    tty = tiny->tty;
-    port = tty->port;
-
-	if(tty)
-	pr_info("%s, tty->port %p\n",__func__,tty->port);
-
-	if(tty && port)
-	{
-
-					if(tiny)
-					{
-
-						memcpy(buf,tiny->bufferIn,tiny->indexIn);
-						size_buf = tiny->indexIn;
-
-						printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
-
-						
-
-						for (i = 0; i < size_buf; ++i)
-						{
-						    if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
-						    {  
-									tty_flip_buffer_push((struct tty_struct*)tty);
-									printk(KERN_ERR "#i=%d...exit ",i);
-									endRead = 1;// tiny->indexIn = i;
-									break;
-							}
-							
-							printk(KERN_INFO "%x",buf[i]);
-					 		tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
-							//Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
-
-						}
-
-						if(endRead==0 && size_buf)
-						{						
-							//tty_insert_flip_char((struct tty_struct*)tty, VEOF, TTY_BREAK);
-							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
-							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
-							
-							//wait_queue_flag = 2 ;
-							//wake_up_interruptible(&wq_close);  
-
-							//tiny->indexIn = 0;
-							
-						}else { 
-								printk(KERN_ERR "send on user = STOP!, bytes %d\n",tiny->indexIn);
-								//tty_buffer_free_all(tty);
-								tty_insert_flip_char((struct tty_struct*)tty, 'S', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'T', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'P', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
-								tty_flip_buffer_push((struct tty_struct*)tty);
-
-								//wait_queue_flag = 3 ;
-								//wake_up_interruptible(&wq_close);   
-							}
-					}else 
-					{					
-	
-						printk(KERN_ERR "send on user = ERROR!, bytes %d\n",tiny->indexIn);
-
-						//tty_buffer_free_all(tty);
-						tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
-						tty_flip_buffer_push((struct tty_struct*)tty);
-						
-						//wait_queue_flag =4;
-						//wake_up_interruptible(&wq_close);
-					}
-
-			
-	} else {  pr_err("%s: Error NULL pointers...tty %p port %p\n", __func__,tty ,port );}
-
-}
-
-#if defined(USE_SIMULATOR)
+#if defined(USE_THREAD)
 static int tiny_thread(void *thread_data)
 {
     unsigned int timeoutMs;
@@ -208,6 +103,8 @@ static int tiny_thread(void *thread_data)
 	int size_buf;
 	int endRead;
 	
+    pr_info("%s %s\n", __func__,__TIME__);
+
 	i=0; 
 	endRead = 0;
 	size_buf=0;
@@ -215,9 +112,12 @@ static int tiny_thread(void *thread_data)
 
     allow_signal(SIGTERM);    
 
-    pr_info("%s %s\n", __func__,__TIME__);
+   // pr_info("%s WAITING start thread\n", __func__);
+  //  wait_event_interruptible(wq_close,wait_queue_close_flag == 0);// пока условие истинно , то помещает поток в сон
+  //  wait_queue_close_flag=0;
+  //  pr_info("%s thread is start\n", __func__);
 
-	if(tiny)
+    if(tiny)
 	pr_info("%s, tiny->tty %p\n",__func__,tiny->tty);
 	
     tty = tiny->tty;
@@ -226,16 +126,18 @@ static int tiny_thread(void *thread_data)
 	if(tty)
 	pr_info("%s, tty->port %p\n",__func__,tty->port);
 
+
+
 	if(tty && port)
 	{
 
 		while(kthread_should_stop() == 0)
 		{
 		    timeoutMs = 1000;
-			pr_err("%s WAITING wq_thread\n", __func__);
+            pr_info("%s WAITING wq_thread\n", __func__);
 		    timeoutMs = wait_event_interruptible_timeout(wq_thread, (timeoutMs==0), msecs_to_jiffies(timeoutMs));
 
-			pr_err("%s END WAIT wq_thread\n", __func__);
+            pr_info("%s END WAIT wq_thread, timeout %d\n", __func__,timeoutMs);
 
 		    if(timeoutMs == -ERESTARTSYS)
 		    {
@@ -243,9 +145,7 @@ static int tiny_thread(void *thread_data)
 		        up(&tiny->sem);
 		      
 				goto BREAK;
-		    }
-
-		    pr_info("%s %s\n", __func__,__TIME__);
+		    }  
 
 		    //down(&tiny->sem);
 			if(down_interruptible(&tiny->sem))
@@ -258,24 +158,34 @@ static int tiny_thread(void *thread_data)
 					if(tiny)
 					{
 
-						memcpy(buf,tiny->bufferIn,tiny->indexIn);
-						size_buf = tiny->indexIn;
+                        pr_info("%s: apply input bytes %d:\n", __func__,tiny->indexIn);
 
-						printk(KERN_ERR "%s: size_buf %d:\n", __func__,size_buf);
-
-						//tty_buffer_request_room((struct tty_struct *)tty, size_buf);
+                        #ifdef _DEBUG
+                        memcpy(buf,tiny->bufferIn,tiny->indexIn);
+                        size_buf = tiny->indexIn;
+                        #else
+                        if(tiny->indexIn)
+                        {
+                            //sprintf(buf,"OK![SIZE:%d]",tiny->indexIn); //$str = "rezult=OK&size[]=%d";
+                            sprintf(buf,"rezult=OK&size=%d",tiny->indexIn);
+                            size_buf = strlen(buf);
+                            pr_info("%s: send answer '%s', bytes %d:\n", __func__,buf,size_buf);
+                        }else size_buf = 0;//*/
+                        #endif
 
 						for (i = 0; i < size_buf; ++i)
 						{
 						    if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
 						    {  
 									tty_flip_buffer_push((struct tty_struct*)tty);
-									printk(KERN_ERR "#i=%d...exit ",i);
+                                    pr_info("#i=%d...exit ",i);
 									endRead = 1;// tiny->indexIn = i;
 									break;
 							}
 							
-							printk(KERN_INFO "%x",buf[i]);
+                            #ifdef _DEBUG
+                            pr_info("%x",buf[i]);
+                            #endif
 					 		tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
 							//Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
 
@@ -283,69 +193,99 @@ static int tiny_thread(void *thread_data)
 
 						if(endRead==0 && size_buf)
 						{						
-							//tty_insert_flip_char((struct tty_struct*)tty, -1, TTY_NORMAL);
-							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
-							printk(KERN_ERR "#send on user = %d bytes\n",tiny->indexIn);
-							
-							wait_queue_flag = 2 ;
-							wake_up_interruptible(&wq_close);  
 
-							//tiny->indexIn = 0;
+							tty_flip_buffer_push((struct tty_struct*)tty);//Функция, которая заталкивает данные для пользователя в текущий переключаемый буфер.
+                            pr_info("#send on user = %d bytes\n",tiny->indexIn);
+							                        
+                            up(&tiny->sem);// освобождение семафора
+                            break;
 							
 						}else { 
-								printk(KERN_ERR "send on user = STOP!, bytes %d\n",tiny->indexIn);
-								//tty_buffer_free_all(tty);
-								tty_insert_flip_char((struct tty_struct*)tty, 'S', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'T', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, 'P', TTY_NORMAL);
-								tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
-								tty_flip_buffer_push((struct tty_struct*)tty);
+                                pr_info("send on user = STOP!, bytes %d\n",tiny->indexIn);
 
-								wait_queue_flag = 3 ;
-								wake_up_interruptible(&wq_close);   
+                                strcpy(buf,"rezult=STOP");
+                                size_buf = strlen(buf);
+
+                                for (i = 0; i < size_buf; ++i)
+                                {
+                                    if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
+                                    {
+                                            tty_flip_buffer_push((struct tty_struct*)tty);
+                                            pr_info("#i=%d...exit ",i);
+                                            endRead = 1;
+                                            break;
+                                    }
+
+                                    tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
+                                    //Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
+
+                                }
+                                if(endRead==0 &&size_buf)
+                                {//???
+                                       tty_flip_buffer_push((struct tty_struct*)tty);//Дисциплина линии будет уведомлена о новых данных с помощью вызова функци
+                                }
+
+                                pr_info("send on user = STOP!, release sem\n");
+                                up(&tiny->sem);// освобождение семафора
+                                pr_info("release sem\n");
+                                break;
 							}
 					}else 
 					{					
 	
-						printk(KERN_ERR "send on user = ERROR!, bytes %d\n",tiny->indexIn);
+                        pr_err("send on user = ERROR!, bytes %d\n",tiny->indexIn);
 
 						//tty_buffer_free_all(tty);
-						tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_insert_flip_char((struct tty_struct*)tty, '!', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'r', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'e', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'z', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'u', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'l', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 't', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, '=', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
+                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
 						tty_flip_buffer_push((struct tty_struct*)tty);
 						
-						wait_queue_flag =4;
-						wake_up_interruptible(&wq_close);
+                        //wait_queue_close_flag =4;
+                        //wake_up_interruptible(&wq_close);
+
+                        up(&tiny->sem);// освобождение семафора
+                        break;
 					}
 
 					up(&tiny->sem);// освобождение семафора
 
-					//wait_queue_flag = 5 ;
+                    //wait_queue_close_flag = 5 ;
 					//wake_up_interruptible(&wq_close);  
 			}
-		}
+        }//end while
+
+        pr_info("exit while in thread..., bytes %d\n",tiny->indexIn);
 
 	} else {  pr_err("%s: Error NULL pointers...tty %p port %p\n", __func__,tty ,port );}
 
 BREAK:
 
+    pr_info("exit thread...\n");
+    thread_id = NULL;
     complete_and_exit(&on_exit, 0);
+
 }
-#endif /* USE_SIMULATOR */
+#endif /* USE_THREAD */
 
 static int tiny_open(struct tty_struct *tty, struct file *file)
 {
-     pr_info("%s %s\n", __func__,__TIME__);
+    bool bRead;
+
+    pr_info("%s %s\n", __func__,__TIME__);
 
     /* initialize the pointer in case something fails */
     tty->driver_data = NULL;
-
-	//if(tiny_serial->open_count>=1) return -EBUSY;
+    bRead = false;
 
     /* get the serial object associated with this tty pointer */
     if(tiny_serial == NULL) 
@@ -359,63 +299,76 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
         tiny_serial->open_count = 0;
 		tiny_serial->indexIn=0;	
 
-		 pr_err("%s INIT TINY ONCE", __func__);	
+         pr_info("%s INIT TINY ONCE", __func__);
     }
 
-	/*if(down_interruptible(&tiny_serial->sem))
+    if(down_interruptible(&tiny_serial->sem))
 	{
 		 pr_err("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
 		 return(-EINTR);  // sleeping has been interrupted by a signal 
-	}*/
-	//   down(&tiny_serial->sem);
+    }
+    //down(&tiny_serial->sem);
 
-	if((file->f_flags & O_WRONLY) == O_WRONLY )
-	{
-			//tiny_serial->indexIn=0;
-		 	pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
-	}
-	else if((file->f_flags & O_RDWR)== O_RDWR)
-	{
-			//tiny_serial->indexIn=0;
+    if((file->f_flags & O_RDWR) == O_RDWR)
+    {
 			 pr_err("%s O_RDWR indexIn %d \n", __func__,tiny_serial->indexIn);
+             bRead = true;
 
-	}else if((file->f_flags & O_RDONLY) == O_RDONLY )
-	{
-			 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
-	}else {  pr_err("%s OTHER\n", __func__); }
+    }else if( (file->f_flags & O_WRONLY) == O_WRONLY )
+            {
+                 pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+                     bRead = false;
+            }
+            else if((file->f_flags & O_RDONLY) == O_RDONLY )
+            {
+                 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+                bRead = true;
+            } else
+            {  pr_err("%s OTHER\n", __func__);     bRead = false; }
 
     /* save our structure within the tty structure */
     tty->driver_data = tiny_serial;
     tiny_serial->tty = tty;
 
     ++tiny_serial->open_count;
-    if (tiny_serial->open_count <= 1) 
-	{
+
+     pr_info("%s: tiny_serial->open_count %d\n",__func__, tiny_serial->open_count);
+
+   // if (tiny_serial->open_count <= 1)
+//	{
         /* this is the first time this port is opened */
         /* do any hardware initialization needed here */
-#if defined(USE_SIMULATOR)      
-        if(thread_id == NULL /*&& (file->f_flags & O_RDONLY) */)
+        pr_info("%s: first thread is %p\n",__func__, thread_id);
+#if defined(USE_THREAD)
+        if(thread_id == NULL && bRead)
         {
-			printk("%s: make thread...\n",__func__);
+            pr_info("%s: make thread...\n",__func__);
 	
 		    thread_id = kthread_create(tiny_thread, (void*)tiny_serial, "tiny_thread");
 
-			printk("%s: thread is %p\n",__func__, thread_id);
-		}
+            pr_info("%s: thread is %p\n",__func__, thread_id);
 
-		if(thread_id)
-		{
-			printk("%s: thread is %p wake_up_process \n",__func__, thread_id);
 
-			mdelay(2);
-
-	        wake_up_process(thread_id);
+            if(thread_id)
+            {
+                pr_info("%s: thread is %p wake_up_process \n",__func__, thread_id);
+                wake_up_process(thread_id);
+                mdelay(2);
  
-		} else { pr_err("%s WAITING...no make & up_process for reading(id=%p\n", __func__,thread_id); }
-#endif /* USE_SIMULATOR */        
-    }else return -EBUSY;
+            } else { pr_err("%s WAITING...no make & up_process for reading(id=%p\n", __func__,thread_id); }
+        }else { pr_err("%s WAITING: no usage thread fo read",__func__); }
+#endif /* USE_THREAD */
+    if (tiny_serial->open_count <= 1)
+    {
 
-   // up(&tiny_serial->sem);
+        up(&tiny_serial->sem);
+
+    }else
+    {
+            up(&tiny_serial->sem);
+            return -EBUSY;
+    }
+
     return 0;
 }
 
@@ -428,39 +381,43 @@ static void do_close(struct tiny_serial *tiny)
         goto exit;
     }
 
-	printk("tiny_close count %d (--)\n",tiny->open_count);
 
-	// down(&tiny->sem);
+
+    down(&tiny->sem);
     --tiny->open_count;
+    pr_info("%s tiny->open_count %d \n",__func__,tiny->open_count);
     if (tiny->open_count <= 0) 
 	{
         /* The port is being closed by the last user. */
         /* Do any hardware specific stuff here */   
 
-#if defined(USE_SIMULATOR)
-        /* shut down our timer and free the memory */
+       // wait_queue_close_flag = 1;
+      //  wake_up_interruptible(&wq_close);
+
+#if defined(USE_THREAD)
+        /* shut down our timer and free the memory
         if(thread_id)
         {
-			printk("tiny_close: send kill thread %p\n",thread_id);
+            pr_info("%s: send kill thread %p\n",__func__,thread_id);
 			
             kill_pid(task_pid(thread_id), SIGTERM, 1);
+
+            pr_info("%s: wait kill thread...\n",__func__);
+
             wait_for_completion(&on_exit);
 
-			printk("tiny_close: thread is killed\n");
-            thread_id = NULL;
-
-			//tiny->indexIn=0;
-        }
-#endif /* USE_SIMULATOR */                  
-
+            pr_info("%s: thread is killed\n",__func__);
+            thread_id = NULL;			
+        }*/
+#endif
     }
 
 	 tiny->indexIn=0;
 
-	 //up(&tiny->sem);
+     up(&tiny->sem);
 
 exit:
-   printk("tiny_close: exit...\n");
+   pr_info("%s: exit...\n",__func__);
 }
 
 static void tiny_close(struct tty_struct *tty, struct file *file)
@@ -479,10 +436,11 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
     if (tiny)
 	{
 
-		pr_info("%s: wait close...",__func__);
-		//wait_event_interruptible(wq_close, wait_queue_flag != 0 );
-        pr_info("%s: go to close..%d.",__func__,wait_queue_flag);
-		wait_queue_flag =0;
+        //pr_info("%s: wait close...",__func__);
+        //wait_event_interruptible(wq_close, wait_queue_close_flag != 0 );
+        //pr_info("%s: go to close..%d.",__func__,wait_queue_close_flag);
+        //wait_queue_close_flag =0;
+
         do_close(tiny);
 
 	}
@@ -511,28 +469,29 @@ static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int 
 		чем функция down().
 	*/
 
-	/*if(down_interruptible(&tiny->sem))
+    if(down_interruptible(&tiny->sem))
 	{
 		 pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
 		 return(-EINTR); // sleeping has been interrupted by a signal 
-	}*/
+    }
 
     if (!tiny->open_count)
 	{
         /* port was not opened */
+        pr_info("%s: is exit: tiny->open %d:\n",__func__,tiny->open_count);
         goto exit;
 	}
 
     /* fake sending the data out a hardware port by
      * writing it to the kernel debug log.
      */
-    printk(KERN_DEBUG "%s - ", __FUNCTION__);
-	printk("apply count %d:\n",count);
+     pr_info("apply current bytes %d, tty->write_cnt %d:\n",count,tty->write_cnt);
+
 	//for (i = 0; i < count; ++i) { printk("%x", buffer[i]); }  printk("\n");
 
 	for (i = 0; i < count; ++i)
 	{
-//			printk("%x", buffer[i]);
+//			pr_info("%x", buffer[i]);
 
 			if(((tiny->indexIn)+i) < TINY_MAX_BUF )
 			{
@@ -544,31 +503,24 @@ static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int 
 
 	if(tiny->indexIn<TINY_MAX_BUF)
 	{
-		printk("bytes[%d]\n",i);
-
-		for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x.", tiny->bufferIn[ii]); }
+        //printk("bytes[%d]\n",i);
+        //for (ii = tiny->indexIn; (ii < TINY_MAX_BUF) && ( ii <  (i+tiny->indexIn) ) ; ++ii) { printk("%x.", tiny->bufferIn[ii]); } 	printk("\n");
 
 		tiny->indexIn+=i;
 
-		printk("\n");
+        pr_info("all bytes in buf %d: \n",tiny->indexIn);
+    } else {	pr_info("buf is full\n"); }
 
-		printk("all bytes in buf %d: \n",tiny->indexIn);
-	} else {	printk("buf is full\n"); }
-
-	retval = count;
+    retval = count;//tiny->indexIn;//
 
 exit:
-   // up(&tiny->sem);
+    up(&tiny->sem);
 
-#ifdef USE_SIMULATOR
-	wait_queue_flag =1;
-	wake_up_interruptible(&wq_close);   
-#else
-	make_answ(tiny);
+#ifdef USE_THREAD
+//wait_queue_close_flag = 1;
+//wake_up_interruptible(&wq_close);
+#endif
 
-//	wait_queue_flag =1;
-	//wake_up_interruptible(&wq_close);  
-#endif	
     return retval;
 }
 
@@ -582,12 +534,12 @@ static int tiny_write_room(struct tty_struct *tty)
     if (!tiny)
         return -ENODEV;
 
-   // down(&tiny->sem);
-	//if(down_interruptible(&tiny->sem))
-	//{
-	//	 pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
-	//	 return(-EINTR);  /* sleeping has been interrupted by a signal */
-	//}
+    //down(&tiny->sem);
+    if(down_interruptible(&tiny->sem))
+    {
+         pr_info("%s WAITING...(sleeping has been interrupted by a signal)\n", __func__);
+         return(-EINTR);  /* sleeping has been interrupted by a signal */
+    }
 
     if (!tiny->open_count) 
 	{
@@ -596,13 +548,13 @@ static int tiny_write_room(struct tty_struct *tty)
     }
 
     /* calculate how much room is left in the device */
-    //room = 255;
 
 	room = (TINY_MAX_BUF - tiny->indexIn);
 	room = (room>=0)?room:0;
 
 exit:
-  //  up(&tiny->sem);
+    up(&tiny->sem);
+
     return room;
 }
 
@@ -613,7 +565,7 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 
 	unsigned int cflag;
 
-	 pr_info("%s %s\n", __func__,__TIME__);
+    pr_info("%s %s\n", __func__,__TIME__);
 
 	cflag = tty->termios->c_cflag;
 
@@ -739,12 +691,12 @@ static int __init tiny_init(void)
     pr_info("%s %s\n", __func__,__TIME__);
 	
 	init_waitqueue_head(&wq_close);
-#if defined(USE_SIMULATOR)
+
+#if defined(USE_THREAD)
     init_waitqueue_head(&wq_thread);
-	
     thread_id = NULL;
-	pr_info("USE_SIMULATOR\n");	
-#endif /* USE_SIMULATOR */  
+    pr_info("USE_THREAD\n");
+#endif /* USE_THREAD */
 
     /* allocate the tty driver */
     tiny_tty_driver = alloc_tty_driver(TINY_TTY_MINORS);
@@ -795,11 +747,6 @@ static int __init tiny_init(void)
     tiny_tty_driver->init_termios.c_cc[VMIN] = 0;  
 	tiny_tty_driver->init_termios.c_cc[VTIME] = 100;
 
-//	tiny_tty_driver->init_termios.c_cc[VKILL] =  21;
-   // tiny_tty_driver->init_termios.c_cc[VEOF] = 4;
- //   tiny_tty_driver->init_termios.c_cc[VSTOP] = 19;
-
-
 	/////////////////////////////////////////////////////////////////////////////////////	
 
 
@@ -832,14 +779,14 @@ static void __exit tiny_exit(void)
 {
     pr_info("%s\n", __func__);
 
-#if defined(USE_SIMULATOR)
+#if defined(USE_THREAD)
     if(thread_id)
     {
         /* shut down our timer and free the memory */
         kill_pid(task_pid(thread_id), SIGTERM, 1);
-        wait_for_completion(&on_exit);
+        wait_for_completion(&on_exit);// ждет завершения потока
     }
-#endif /* USE_SIMULATOR */  
+#endif /* USE_THREAD */
 
     tty_unregister_device(tiny_tty_driver, 0);
     tty_unregister_driver(tiny_tty_driver);
@@ -849,6 +796,8 @@ static void __exit tiny_exit(void)
         /* close the port */
         while (tiny_serial->open_count)
             do_close(tiny_serial);
+
+
 
 		tty_port_free_xmit_buf(tiny_serial->tty->port);
 

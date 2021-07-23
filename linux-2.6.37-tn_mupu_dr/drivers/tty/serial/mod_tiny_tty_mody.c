@@ -255,9 +255,12 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
         /* do any hardware initialization needed here */
          up(&tiny_serial->sem);
 
-    }else return -EBUSY;
+    }else 
+	{
+		 up(&tiny_serial->sem); return -EBUSY; 
+	}
 
-    up(&tiny_serial->sem);
+    //up(&tiny_serial->sem);
     return 0;
 }
 
@@ -347,7 +350,7 @@ static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int 
      * writing it to the kernel debug log.
      */
 //    printk(KERN_DEBUG "%s - ", __FUNCTION__);
-	printk("apply current bytes %d, tty->write_cnt %d:\n",count,tty->write_cnt);
+    printk("apply current bytes %d, tty->write_cnt %d:\n", count ,tty->write_cnt);
 	//for (i = 0; i < count; ++i) { printk("%x", buffer[i]); }  printk("\n");
 
 	for (i = 0; i < count; ++i)
@@ -371,7 +374,7 @@ static int tiny_write(struct tty_struct *tty,  const unsigned char *buffer, int 
 		printk("all bytes in buf %d: \n",tiny->indexIn);
 	} else {	printk("buf is full\n");  }
 
-	retval = count;
+    retval = count;//tiny->indexIn;//
 
 exit:
     up(&tiny->sem);
