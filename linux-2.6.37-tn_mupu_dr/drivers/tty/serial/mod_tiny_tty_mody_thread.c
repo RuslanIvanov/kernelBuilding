@@ -59,6 +59,8 @@ UPDATE: первая проблема (частично) решена с пом�
 #define TINY_TTY_MINORS     1   /* only have 4 devices */
 
 #define TINY_MAX_BUF 20000
+#define TTY_COUNT 1
+#define TIME_STOP 40 //(100)
 
 #if defined(USE_THREAD)
 static struct task_struct *thread_id;
@@ -126,7 +128,7 @@ static int tiny_thread(void *thread_data)
 	if(tty)
 	pr_info("%s, tty->port %p\n",__func__,tty->port);
 
-
+	
 
 	if(tty && port)
 	{
@@ -158,15 +160,14 @@ static int tiny_thread(void *thread_data)
 					if(tiny)
 					{
 
-                        pr_info("%s: apply input bytes %d:\n", __func__,tiny->indexIn);
+                        pr_info("%s: apply input bytes %d tty->count %d:\n", __func__,tiny->indexIn,tty->count);
 
                         #ifdef _DEBUG
                         memcpy(buf,tiny->bufferIn,tiny->indexIn);
                         size_buf = tiny->indexIn;
                         #else
                         if(tiny->indexIn)
-                        {
-                            //sprintf(buf,"OK![SIZE:%d]",tiny->indexIn); //$str = "rezult=OK&size[]=%d";
+                        {                            
                             sprintf(buf,"rezult=OK&size=%d",tiny->indexIn);
                             size_buf = strlen(buf);
                             pr_info("%s: send answer '%s', bytes %d:\n", __func__,buf,size_buf);
@@ -201,60 +202,86 @@ static int tiny_thread(void *thread_data)
                             break;
 							
 						}else { 
-                                pr_info("send on user = STOP!, bytes %d\n",tiny->indexIn);
+                                pr_info("send on user = STOP!, bytes %d, tty->count %d, size %d\n",tiny->indexIn,tty->count,TTY_COUNT);
 
-                                strcpy(buf,"rezult=STOP");
-                                size_buf = strlen(buf);
+								if(tty->count > TTY_COUNT) 
+								{
+									pr_info("Error: out of range");
+									up(&tiny->sem);// освобождение семафора
+		                            break;
+								}
+								else
+								{
 
-                                for (i = 0; i < size_buf; ++i)
-                                {
-                                    if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
-                                    {
-                                            tty_flip_buffer_push((struct tty_struct*)tty);
-                                            pr_info("#i=%d...exit ",i);
-                                            endRead = 1;
-                                            break;
-                                    }
+		                            strcpy(buf,"rezult=STOP&size=0");
+		                            size_buf = strlen(buf);
 
-                                    tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
-                                    //Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
+		                            for (i = 0; i < size_buf; ++i)
+		                            {
+		                                if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
+		                                {
+		                                        tty_flip_buffer_push((struct tty_struct*)tty);
+		                                        pr_info("#i=%d...exit ",i);
+		                                        endRead = 1;
+		                                        break;
+		                                }
 
-                                }
-                                if(endRead==0 &&size_buf)
-                                {//???
-                                       tty_flip_buffer_push((struct tty_struct*)tty);//Дисциплина линии будет уведомлена о новых данных с помощью вызова функци
-                                }
+		                                tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
+		                                //Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
 
-                                pr_info("send on user = STOP!, release sem\n");
-                                up(&tiny->sem);// освобождение семафора
-                                pr_info("release sem\n");
-                                break;
+		                            }
+		                            if(endRead==0 &&size_buf)
+		                            {//???
+		                                   tty_flip_buffer_push((struct tty_struct*)tty);//Дисциплина линии будет уведомлена о новых данных с помощью вызова функци
+		                            }
+
+		                            pr_info("send on user = STOP!, release sem\n");
+		                            up(&tiny->sem);// освобождение семафора
+		                            pr_info("release sem\n");
+
+		                            break;
+
+								}
 							}
 					}else 
 					{					
 	
                         pr_err("send on user = ERROR!, bytes %d\n",tiny->indexIn);
 
-						//tty_buffer_free_all(tty);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'r', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'e', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'z', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'u', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'l', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 't', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, '=', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'E', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'O', TTY_NORMAL);
-                        tty_insert_flip_char((struct tty_struct*)tty, 'R', TTY_NORMAL);
-						tty_flip_buffer_push((struct tty_struct*)tty);
-						
-                        //wait_queue_close_flag =4;
-                        //wake_up_interruptible(&wq_close);
+						if(tty->count > TTY_COUNT) 
+						{
+							pr_info("Error: out of range");
+							up(&tiny->sem);// освобождение семафора
+		                    break;
+						}
+						else
+						{
 
-                        up(&tiny->sem);// освобождение семафора
-                        break;
+                            strcpy(buf,"rezult=ERROR&size=0");
+                            size_buf = strlen(buf);
+                            for (i = 0; i < size_buf; ++i)
+                            {
+                                if (!tty_buffer_request_room((struct tty_struct*)tty, 1))
+                                {
+                                        tty_flip_buffer_push((struct tty_struct*)tty);
+                                        pr_info("#i=%d...exit ",i);
+                                        endRead = 1;
+                                        break;
+                                }
+                                tty_insert_flip_char((struct tty_struct*)tty, buf[i], TTY_NORMAL);// выбивает поток
+                                //Функция, которая вставляет символы в переключаемый буфер tty устройства для чтения пользователем.
+
+                            }
+                            if(endRead==0 &&size_buf)
+                            {//???
+	                                   tty_flip_buffer_push((struct tty_struct*)tty);//Дисциплина линии будет уведомлена о новых данных с помощью вызова функци
+                            }
+                            pr_info("send on user = STOP!, release sem\n");
+                            up(&tiny->sem);// освобождение семафора
+                            pr_info("release sem\n");
+                            break;
+
+						}
 					}
 
 					up(&tiny->sem);// освобождение семафора
@@ -299,6 +326,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
         tiny_serial->open_count = 0;
 		tiny_serial->indexIn=0;	
 
+		 
          pr_info("%s INIT TINY ONCE", __func__);
     }
 
@@ -316,13 +344,13 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
     }else if( (file->f_flags & O_WRONLY) == O_WRONLY )
             {
-                 pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
-                     bRead = false;
+					pr_err("%s O_WRONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+                    bRead = false;
             }
             else if((file->f_flags & O_RDONLY) == O_RDONLY )
             {
-                 pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
-                bRead = true;
+                 	pr_err("%s O_RDONLY indexIn %d \n", __func__,tiny_serial->indexIn);
+                	bRead = true;
             } else
             {  pr_err("%s OTHER\n", __func__);     bRead = false; }
 
@@ -358,9 +386,16 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
             } else { pr_err("%s WAITING...no make & up_process for reading(id=%p\n", __func__,thread_id); }
         }else { pr_err("%s WAITING: no usage thread fo read",__func__); }
 #endif /* USE_THREAD */
+
+	if(!tty->count)
+		 tty->count++;
+
+	 pr_info("%s: tty->count %d\n",__func__,tty->count);
+
     if (tiny_serial->open_count <= 1)
     {
-
+		//tty->count = 0;
+		//tty->count++ ;
         up(&tiny_serial->sem);
 
     }else
@@ -388,6 +423,8 @@ static void do_close(struct tiny_serial *tiny)
     pr_info("%s tiny->open_count %d \n",__func__,tiny->open_count);
     if (tiny->open_count <= 0) 
 	{
+
+		
         /* The port is being closed by the last user. */
         /* Do any hardware specific stuff here */   
 
@@ -440,6 +477,14 @@ static void tiny_close(struct tty_struct *tty, struct file *file)
         //wait_event_interruptible(wq_close, wait_queue_close_flag != 0 );
         //pr_info("%s: go to close..%d.",__func__,wait_queue_close_flag);
         //wait_queue_close_flag =0;
+
+		//if (--tty->count < 0) 
+		//{
+		//pr_info("%s: bad tty->count (%d)\n", __func__,tty->count);
+		//tty->count = 0;
+		//}//*/
+
+		pr_info("%s: tty->count %d\n", __func__,tty->count);
 
         do_close(tiny);
 
@@ -647,29 +692,41 @@ static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 
 static int tiny_install(struct tty_driver *driver, struct tty_struct *tty)
 {
-    int retval = -ENOMEM;
+    int retval;
+	int rez;
 
+	retval = -ENOMEM;
+	rez =0;
     pr_info("%s %s\n", __func__,__TIME__);
 
+	
     tty->port = kmalloc(sizeof *tty->port, GFP_KERNEL);
 
     if (!tty->port)
         goto err;
 
-    tty_init_termios(tty);
-    driver->ttys[0] = tty;
+    rez = tty_init_termios(tty);
 
-    tty_port_init(tty->port);
-    //tty_buffer_set_limit(tty->port, 8192);
-	//tty_port_alloc_xmit_buf(tty->port);
-    tty_driver_kref_get(driver);
-    tty->count++;   
+	if(rez==0)
+	{
+	    driver->ttys[0] = tty;
+		tty_port_init(tty->port);
+	    tty_driver_kref_get(driver);
+		//tty->count = 0;
+	    tty->count++;  //было 
 
-    return 0;
+		pr_info("%s - tty->count = %d \n", __func__,tty->count);
+
+		return 0;
+	}
+
+    return retval;
 
 err:
     pr_info("%s - err\n", __func__);
+
     kfree(tty->port);
+
     return retval;
 }
 
@@ -745,7 +802,7 @@ static int __init tiny_init(void)
     tiny_tty_driver->init_termios.c_cc[VEOF] = 0x4;//0?//EOF = -1, EOT (end of transmission) = 0x04;
 
     tiny_tty_driver->init_termios.c_cc[VMIN] = 0;  
-	tiny_tty_driver->init_termios.c_cc[VTIME] = 100;
+	tiny_tty_driver->init_termios.c_cc[VTIME] = TIME_STOP;
 
 	/////////////////////////////////////////////////////////////////////////////////////	
 
@@ -771,7 +828,7 @@ static int __init tiny_init(void)
 
 	//tiny_serial->indexIn=0;
 	tiny_serial = NULL;
-
+	
     return retval;
 }
 
