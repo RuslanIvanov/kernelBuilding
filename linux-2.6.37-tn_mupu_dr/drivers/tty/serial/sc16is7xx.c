@@ -29,7 +29,7 @@
 #include <linux/uaccess.h>
 #include <linux/serial_sc16ix7xx.h>
 
-#define SC16IS7XX_NAME		"sc16is750"//	"sc16is7xx"
+#define SC16IS7XX_NAME		"sc16is750" //	"sc16is7xx"
 
 #define SC16IS7XX_A			"sc16is7xxA"
 #define SC16IS7XX_B			"sc16is7xxB"
@@ -343,6 +343,8 @@ static int sc16is7xx_line;
 
 static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_t *data)
 {
+		int ret;
+
         struct i2c_msg msgs[] = {
                 {
                         .addr   = client->addr,
@@ -358,9 +360,7 @@ static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_
                 }
         };
 	
-	printk(KERN_INFO "sc16is7xx_i2c_read_reg: RUN");
-
-        int ret;
+		printk(KERN_INFO "sc16is7xx_i2c_read_reg: RUN");    
 
         data[0] = reg;
 
@@ -368,21 +368,21 @@ static int sc16is7xx_i2c_read_reg(struct i2c_client *client, uint16_t reg,uint8_
 
         if (ret != ARRAY_SIZE(msgs)) 
         {
-		printk(KERN_ERR "%s: read error, ret=%d\n",__func__, ret);
-                return -EIO;
+			printk(KERN_ERR "%s: read error, ret=%d\n",__func__, ret);
+             return -EIO;
         }
 	
-	printk(KERN_INFO "sc16is7xx_i2c_read_reg: OK");
+		printk(KERN_INFO "sc16is7xx_i2c_read_reg: OK");
 
         return 0;
 }
 
 static int sc16is7xx_i2c_write_reg(struct i2c_client *client, uint16_t reg, uint8_t val)
 {
-	printk(KERN_INFO "sc16is7xx_i2c_write_reg: RUN"); 	
-
         uint8_t data[2];
         int err;
+
+		printk(KERN_INFO "sc16is7xx_i2c_write_reg: RUN"); 	
 
         data[0] = reg;
         data[1] = val;
@@ -401,12 +401,11 @@ static int sc16is7xx_i2c_write_reg(struct i2c_client *client, uint16_t reg, uint
 
 static u8 sc16is7xx_port_read(struct uart_port *port, u8 reg)
 {
-	printk(KERN_INFO "sc16is7xx_port_read: RUN"); 
-
 	struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
 	//unsigned int val = 0;
 	uint8_t val; val=0;
 
+	printk(KERN_INFO "sc16is7xx_port_read: RUN"); 
 //	regmap_read(s->regmap,(reg << SC16IS7XX_REG_SHIFT) | port->line, &val);
  	sc16is7xx_i2c_read_reg(s->client, (reg << SC16IS7XX_REG_SHIFT) | port->line, &val);
 
@@ -417,10 +416,9 @@ static u8 sc16is7xx_port_read(struct uart_port *port, u8 reg)
 
 static void sc16is7xx_port_write(struct uart_port *port, u8 reg, u8 val)
 {
-	printk(KERN_INFO "sc16is7xx_port_write: RUN"); 
-
 	struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
 
+	printk(KERN_INFO "sc16is7xx_port_write: RUN"); 
 //	regmap_write(s->regmap,(reg << SC16IS7XX_REG_SHIFT) | port->line, val);
 
 	sc16is7xx_i2c_write_reg(s->client,(reg << SC16IS7XX_REG_SHIFT) | port->line, val);
@@ -557,8 +555,11 @@ static void sc16is7xx_handle_rx(struct uart_port *port, unsigned int rxlen,
 				unsigned int iir)
 {
 	struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
+	struct tty_struct *tty;
 	unsigned int lsr = 0, ch, flag, bytes_read, i;
 	bool read_lsr = (iir == SC16IS7XX_IIR_RLSE_SRC) ? true : false;
+
+	tty = port->state->port.tty;
 
 	if (unlikely(rxlen >= sizeof(s->buf))) {
 //		dev_warn_ratelimited(port->dev, "Port %i: Possible RX FIFO overrun: %d\n",   port->line, rxlen);
@@ -631,7 +632,10 @@ static void sc16is7xx_handle_rx(struct uart_port *port, unsigned int rxlen,
 		rxlen -= bytes_read;
 	}
 
-	tty_flip_buffer_push(&port->state->port);
+	if(tty)
+	{
+		tty_flip_buffer_push(tty);	
+	}else { pr_err("%s: error tty", __func__); }
 }
 
 static void sc16is7xx_handle_tx(struct uart_port *port)
@@ -1003,7 +1007,7 @@ static int sc16is7xx_startup(struct uart_port *port)
 	unsigned int val;
 
 
-	printk(KERN_INFO "sc16is7xx_startup: port %x",port); 
+	printk(KERN_INFO "sc16is7xx_startup: port %p",port); 
 	sc16is7xx_power(port, 1);
 
 	
@@ -1190,18 +1194,21 @@ static int sc16is7xx_gpio_direction_output(struct gpio_chip *chip,
 static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype,  /*struct regmap *regmap*/struct i2c_client *i2c, int irq, unsigned long flags)
 {
 	//dev_get_platdata(const struct device *dev) { return dev->platform_data; }
+
+	static unsigned char countProbe;
+	int i, ret;
 	unsigned long freq;
 	struct plat_serial_sc16ix7xx *pfreq; 
-	int i, ret;
-	char nameDev[10];
 	struct sc16is7xx_port *s;
-	static unsigned char countProbe;
 
 	countProbe++;
 	printk(KERN_INFO "sc16is7xx_probe: run (%d)",countProbe);
 
 	if (IS_ERR(/*regmap*/ i2c))
+	{
+		pr_err("%s: i2c error",__func__);
 		return PTR_ERR(/*regmap*/ i2c);
+	}
 
 	pfreq = dev_get_platdata(dev);
 	/* Alloc port structure */
@@ -1248,21 +1255,15 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	/* Register UART driver */
 	s->uart.owner		= THIS_MODULE;
 
-	/*if(pfreq->num_i2c==0)
-			s->uart.dev_name = "ttySC1PVV";
-	else if(pfreq->num_i2c==1)
-			s->uart.dev_name = "ttySC2PVV";
-	else if(pfreq->num_i2c==2) 
-			s->uart.dev_name = "ttySC3PVV";
-		else */ 
-	s->uart.dev_name = "ttySCPVV";
-
+	//s->uart.dev_name = "ttySBR";//!!!!!!!!!!!!!!
+	s->uart.dev_name = SC16IS7XX_NAME;
 	//strcat(s->uart.dev_name, pfreq->name_i2c);
 
 	printk(KERN_INFO "sc16is7xx_probe: dev_name UART driver ' %s '",s->uart.dev_name);
 
 	s->uart.nr	= devtype->nr_uart;
-/*
+
+   /*
 	if(pfreq->num_i2c==0)
 		s->uart.dev_name = SC16IS7XX_A;
 	else if(pfreq->num_i2c==1)
@@ -1270,7 +1271,7 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	else if(pfreq->num_i2c==2) 
 			s->uart.dev_name = SC16IS7XX_C;
 		else*/
-	 s->uart.dev_name = SC16IS7XX_NAME;
+	 s->uart.dev_name = SC16IS7XX_NAME;//!!!!!!!!!!!!!11
 
 	s->uart.major		= SC16IS7XX_MAJOR+(pfreq->num_i2c);
 	s->uart.minor		= SC16IS7XX_MINOR_START;

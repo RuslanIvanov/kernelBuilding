@@ -206,7 +206,7 @@ static int tiny_thread(void *thread_data)
 
 								if(tty->count > TTY_COUNT) 
 								{
-									pr_info("Error: out of range");
+									pr_info("Error: out of range: tty->count %d", tty->count);
 									up(&tiny->sem);// освобождение семафора
 		                            break;
 								}
@@ -250,7 +250,7 @@ static int tiny_thread(void *thread_data)
 
 						if(tty->count > TTY_COUNT) 
 						{
-							pr_info("Error: out of range");
+							pr_info("Error: out of range: tty->count %d", tty->count);
 							up(&tiny->sem);// освобождение семафора
 		                    break;
 						}
@@ -389,8 +389,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 
 	if(!tty->count)
 		 tty->count++;
-
-	 pr_info("%s: tty->count %d\n",__func__,tty->count);
+	 
 
     if (tiny_serial->open_count <= 1)
     {
@@ -403,6 +402,8 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
             up(&tiny_serial->sem);
             return -EBUSY;
     }
+
+	pr_info("%s: tty->count %d\n",__func__,tty->count);
 
     return 0;
 }
@@ -709,11 +710,14 @@ static int tiny_install(struct tty_driver *driver, struct tty_struct *tty)
 
 	if(rez==0)
 	{
-	    driver->ttys[0] = tty;
+	    //driver->ttys[0] = tty;
 		tty_port_init(tty->port);
 	    tty_driver_kref_get(driver);
-		//tty->count = 0;
+
+		tty->count = 0;
 	    tty->count++;  //было 
+
+		 driver->ttys[0] = tty;
 
 		pr_info("%s - tty->count = %d \n", __func__,tty->count);
 
