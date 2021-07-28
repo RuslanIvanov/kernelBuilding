@@ -628,12 +628,12 @@ static struct i2c_board_info __initdata tam3517_i2c1_boardinfo[] = {
 
 static struct plat_serial_sxx __initdata sc16ix7xx_ports[] = {
 	{
-		.uartclk = 14745600,
+		.uartclk = 1843200,
 		.num_i2c = 1,//1,//i2c2
 		.name_i2c = "sc16is750",//"BRP_I2C",
 	},
 	{
-		.uartclk = 14745600,
+		.uartclk = 1843200,
 		.num_i2c = 2,//2,//i2c3
 		.name_i2c ="sc16is750" ,//"BRP_I3C",
 	},

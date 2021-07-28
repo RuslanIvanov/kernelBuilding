@@ -10,6 +10,8 @@
  * (at your option) any later version.
  *
  * Modifaied for ker 2.6.37 by Russl
+
+	stty 115200 cs8 -F /dev/sc16is7500
  */
 
 #include <linux/bitops.h>
@@ -307,6 +309,15 @@
 #define        UART_PM_STATE_ON   0
 #define        UART_PM_STATE_OFF  3
 
+#define CRM_DIV_ROUND_CLOSEST(x, divisor) \
+(                  \
+{                                                       \
+         typeof(divisor) __divisor = divisor;            \
+         (((x) + ((__divisor) / 2)) / (__divisor));      \
+}\
+)
+
+
 struct sc16is7xx_devtype 
 {
 	char name[10];
@@ -504,12 +515,61 @@ static bool sc16is7xx_regmap_precious(struct device *dev, unsigned int reg)
 	return false;
 }*/
 
+static int setBaud(struct uart_port *port,int baud)
+{
+        unsigned char prescaler = 0; //для определения читать MCR[7]= 0, то prescaler=1,  MCR[7]= 1 , то prescaler=4
+        double clk = 1.8432*1000000; //Частота кварцевого генератора (def) (Гц)
+
+        prescaler = ((sc16is7xx_port_read(port,SC16IS7XX_MCR_REG)&SC16IS7XX_MCR_CLKSEL_BIT)==0) ? 1:4;
+
+        pr_info("%s: prescaler=%x",__func__,prescaler);
+
+        unsigned short div = ((clk / prescaler) / (baud*16));
+
+        if (div > 0xffff)
+        {
+            prescaler = SC16IS7XX_MCR_CLKSEL_BIT;
+            div /= 4;
+
+            pr_info("%s: div > 0xffff %d",__func__,div);
+        }
+
+        pr_info("%s: div = %d",__func__,div);
+
+        sc16is7xx_port_write(port, SC16IS7XX_DLH_REG, (div>>8)&0xff);
+
+        sc16is7xx_port_write(port, SC16IS7XX_DLL_REG, div & 0xff);
+
+        sc16is7xx_port_write(port, SC16IS7XX_LCR_REG ,SC16IS7XX_LCR_CONF_MODE_B);
+    
+        return CRM_DIV_ROUND_CLOSEST(clk / 16, div);
+}
+
 static int sc16is7xx_set_baud(struct uart_port *port, int baud)
 {
 	//struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
 	u8 lcr;
-	u8 prescaler = 0;
-	unsigned long clk = port->uartclk, div = clk / 16 / baud;
+	u8 prescaler ;
+	unsigned long clk ; 
+	unsigned long div ;
+
+	pr_info("%s: BEGIN baud %d\n",__func__, baud);
+
+	prescaler = 0;
+	clk = 0l; 
+	div = 0l;
+	lcr = 0;
+
+	if(baud == 0) 
+	{
+		pr_err("%s: error baudrate = %d\n",__func__, baud);
+		return 0;
+	}
+
+	clk = port->uartclk; 
+	div = clk / 16 / baud;
+
+	pr_info("%s: clk %lu\n",__func__, clk);
 
 	if (div > 0xffff) {
 		prescaler = SC16IS7XX_MCR_CLKSEL_BIT;
@@ -547,6 +607,15 @@ static int sc16is7xx_set_baud(struct uart_port *port, int baud)
 
 	/* Put LCR back to the normal mode */
 	sc16is7xx_port_write(port, SC16IS7XX_LCR_REG, lcr);
+
+	
+	if(div==0) 
+	{
+		pr_err("%s: error div = %lu\n",__func__, div);
+		return 0;
+	}
+
+	pr_info("%s: OK, div %lu\n",__func__, div);
 
 	return DIV_ROUND_CLOSEST(clk / 16, div);
 }
@@ -860,17 +929,39 @@ static void sc16is7xx_break_ctl(struct uart_port *port, int break_state)
 			      break_state ? SC16IS7XX_LCR_TXBREAK_BIT : 0);
 }
 
+#define RELEVANT_IFLAG(iflag) ((iflag) & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
+
 static void sc16is7xx_set_termios(struct uart_port *port,
 				  struct ktermios *termios,
 				  struct ktermios *old)
 {
 	//struct sc16is7xx_port *s = dev_get_drvdata(port->dev);
-	unsigned int lcr, flow = 0;
+	unsigned int lcr;
+	unsigned int flow;
 	int baud;
+	unsigned int cflag;
 
-	printk(KERN_INFO "sc16is7xx_set_termios: RUN"); 
+	printk(KERN_INFO "sc16is7xx_set_termios: RUN, port %p",port); 
+
+	flow =0;
+	lcr = 0;
+	baud = 38400;
+	cflag = termios->c_cflag;
+
+	if(!termios) { pr_err("%s: termios pointer no correct: termios %p",__func__,termios); return; }
+
 	/* Mask termios capabilities we don't support */
 	termios->c_cflag &= ~CMSPAR;
+
+	if (old) 
+	{
+		if ((cflag == old->c_cflag) &&
+		    (RELEVANT_IFLAG(termios->c_iflag) ==
+		     RELEVANT_IFLAG(old->c_iflag))) {
+			printk(KERN_DEBUG "termios - nothing to change...\n");
+			return;
+		}
+	}
 
 	/* Word size */
 	switch (termios->c_cflag & CSIZE) {
@@ -894,7 +985,8 @@ static void sc16is7xx_set_termios(struct uart_port *port,
 	}
 
 	/* Parity */
-	if (termios->c_cflag & PARENB) {
+	if (termios->c_cflag & PARENB) 
+	{
 		lcr |= SC16IS7XX_LCR_PARITY_BIT;
 		if (!(termios->c_cflag & PARODD))
 			lcr |= SC16IS7XX_LCR_EVENPARITY_BIT;
@@ -941,12 +1033,50 @@ static void sc16is7xx_set_termios(struct uart_port *port,
 	sc16is7xx_port_write(port, SC16IS7XX_LCR_REG, lcr);
 
 	/* Get baud rate generator configuration */
-	baud = uart_get_baud_rate(port, termios, old,
-				  port->uartclk / 16 / 4 / 0xffff,
-				  port->uartclk / 16);
+
+	pr_info("%s: port->uartclk = %d",__func__,port->uartclk);
+	//if(old && termios)
+	{
+		baud = uart_get_baud_rate(port, termios, old, port->uartclk / 16 / 4 / 0xffff, port->uartclk / 16);
+		/*
+		uart_get_baud_rate - return baud rate for a particular port : uart_port structure describing the port in question. : 
+		desired termios settings. : old termios (or NULL) : minimum acceptable baud rate : maximum acceptable baud rate
+		Decode the termios structure into a numeric baud rate, taking account of the magic 38400 baud rate (with spd_* flags), 
+		and mapping the B0 rate to 9600 baud. If the new baud rate is invalid, try the old termios setting. If it's still invalid, we try 9600 baud.
+		Update the structure to reflect the baud rate we're actually going to be using. Don't do this for the case where B0 is requested ("hang up").
+
+		Arguments
+		port
+	    uart_port structure describing the port in question. 
+		termios
+	    desired termios settings. 
+		old
+	    old termios (or NULL) 
+		min
+	    minimum acceptable baud rate 
+		max
+	    maximum acceptable baud rate 
+
+		Description:
+		Decode the termios structure into a numeric baud rate, taking account of the magic 38400 baud rate (with spd_* flags), and mapping the B0 rate to 9600 baud.
+		If the new baud rate is invalid, try the old termios setting. If it's still invalid, we try 9600 baud.
+		Update the termios structure to reflect the baud rate we're actually going to be using. 
+
+		 */
+	}
+	// else { pr_err("%s: termios pointer no correct: termios %p, old_tremios %p",__func__,termios,old);  }
+
+	printk(KERN_INFO "sc16is7xx_set_termios: speed %d",baud); 
 
 	/* Setup baudrate generator */
 	baud = sc16is7xx_set_baud(port, baud);
+	//baud = setBaud(port,baud);
+
+	if(baud == 0)
+	{
+		pr_err("%s: error baudrate %d after 'sc16is7xx_set_baud'",__func__,baud);
+		return;
+	}
 
 	/* Update timeout according to new baud rate */
 	uart_update_timeout(port, termios->c_cflag, baud);
@@ -1198,7 +1328,9 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	static unsigned char countProbe;
 	int i, ret;
 	unsigned long freq;
-	struct plat_serial_sc16ix7xx *pfreq; 
+	//struct plat_serial_sc16ix7xx *pfreq; 
+	//struct plat_serial_sxx * psxx;
+	struct plat_serial_sxx * pfreq;
 	struct sc16is7xx_port *s;
 
 	countProbe++;
@@ -1211,6 +1343,8 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 	}
 
 	pfreq = dev_get_platdata(dev);
+
+	//pfreq->uartclk = dev->uartclk;
 	/* Alloc port structure */
 	s = devm_kzalloc(dev, sizeof(*s) + sizeof(struct sc16is7xx_one) * devtype->nr_uart,GFP_KERNEL);
 	if (!s) 
@@ -1223,27 +1357,48 @@ static int sc16is7xx_probe(struct device *dev, struct sc16is7xx_devtype *devtype
 
 	printk(KERN_INFO "sc16is7xx_probe: clk_get from dev...");
 
-	//if(!s->clk)
-	{
-		s->clk = clk_get(dev, NULL);
-	//	clk_enable(s->clk);
-		//s->uartclk = clk_get_rate(s->clk);
-		//clk_disable(s->clk);
-		/* only enable clock when UART is in use */
-		printk(KERN_INFO "sc16is7xx_probe: clock UART is use");
-	}	
+	//s->clk = clk_get(dev, "sc16is750");
+	s->clk = clk_get(dev, NULL);
 
-	if (IS_ERR(s->clk)) {
+	if(!s->clk)
+	{
+	 	//	s->clk = clk_get(dev, NULL);
+		//	clk_enable(s->clk);
+		// s->uartclk = clk_get_rate(s->clk);
+		// clk_disable(s->clk);
+		/* only enable clock when UART is in use */
+		pr_err("%s: clock UART is use",__func__);
+	}else {	pr_err("%s: clock UART no use",__func__); }
+
+	if (IS_ERR(s->clk)) 
+	{
 		if (pfreq)
-			freq = pfreq->uartclk;//*pfreq;
+		{
+			printk(KERN_ERR "sc16is7xx_probe: IS_ERR(s->clk): %lu, s->clk %d",pfreq->uartclk,s->clk);
+
+			if(pfreq->uartclk)
+			{
+				freq = pfreq->uartclk;//*pfreq; 
+				printk(KERN_INFO "sc16is7xx_probe: pfreq->uartclk %lu",pfreq->uartclk);
+			}
+			else 
+			{ 
+				freq = pfreq->uartclk = 1.8432*1000000; 
+			}			
+		
+		}
 		else
-			return PTR_ERR(s->clk);
+		{
+			printk(KERN_INFO "sc16is7xx_probe: PTR_ERR(s->clk");
+			return PTR_ERR(s->clk);	
+		}
 	} else 
 	{
 		freq = clk_get_rate(s->clk);
+		printk(KERN_INFO "sc16is7xx_probe: s->clk is OK!");
 	}
 
-	printk(KERN_INFO "sc16is7xx_probe: frec = %ld",freq);
+	printk(KERN_INFO "sc16is7xx_probe: frec = %ld",freq);//0 
 
 	//s->regmap = regmap;
 	s->client = i2c;
