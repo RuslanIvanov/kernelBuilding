@@ -37,10 +37,10 @@
 #include "mod_pvv.h"
 #include "ioctl_pvv2.h"
 
-#define PVV2_DRV_VERSION	"2019-09-28"
+#define PVV2_DRV_VERSION	"2021-11-11"
 #define PVV2_DEVNAME "pvv2"
 #define PVV2_CHDEVNAME "chpvv2"
-#define GPIO_PVV2_DEVICE_DESC    "pvv2_device"
+#define GPIO_PVV2_DEVICE_DESC    "pvv2_device (tam3517)"
 
 #define  COUNT_DEVICES 1 //pvv2: rm
 
@@ -286,19 +286,32 @@ static ssize_t pvv_read (struct file *pFile, char __user *buffer, size_t length,
 
 static unsigned int pvv_poll(struct file *pfile, poll_table *wait)
 {// для режима инициализации
-        unsigned int mask;
+      /*  unsigned int mask;
         mask = 0;
 
         poll_wait(pfile, &wqrm, wait);
 
- 	//mutex_lock_interruptible(&mutex);
-	mutex_lock(&mutex);
-	//if (pfile->f_pos != dev->posW)
+ 		//mutex_lock_interruptible(&mutex);
+		mutex_lock(&mutex);
+		//if (pfile->f_pos != dev->posW)
         mask |= POLLIN | POLLRDNORM; //чтение 
 
         mutex_unlock(&mutex);
 
+        return mask;*/
+
+		unsigned int mask;
+        mask = 0; 
+
+        if(flagrm != 0)
+        {
+                poll_wait(pfile, &wqrm, wait);
+                mask |= POLLIN | POLLRDNORM; //чтение
+        }
+        flagrm = 0;
+
         return mask;
+
 }
 
 static struct file_operations fops = {

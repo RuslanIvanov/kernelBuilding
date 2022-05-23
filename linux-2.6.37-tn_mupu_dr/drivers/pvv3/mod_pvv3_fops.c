@@ -37,10 +37,10 @@
 #include "mod_pvv.h"
 #include "ioctl_pvv3.h"
 
-#define PVV3_DRV_VERSION	"2019-07-08"
+#define PVV3_DRV_VERSION	"2021-10-21"
 #define PVV3_DEVNAME "pvv3"
 #define PVV3_CHDEVNAME "chpvv3"
-#define GPIO_PVV3_DEVICE_DESC    "pvv3_device"
+#define GPIO_PVV3_DEVICE_DESC    "pvv3_device (tam3517)"
 
 #define  COUNT_DEVICES 1 //pvv3: dpu
 
@@ -238,9 +238,17 @@ static ssize_t pvv_read (struct file *pFile, char __user *buffer, size_t length,
 
 static unsigned int pvv_poll(struct file *pfile, poll_table *wait)
 {// для режима инициализации
-        unsigned int mask;
-        mask = 0;    
-       return mask;
+
+		unsigned int mask;
+        mask = 0; 
+
+        if(flagdpu != 0)
+        {
+        	poll_wait(pfile, &wqdpu, wait);
+                mask |= POLLIN | POLLRDNORM; //чтение
+        }
+        flagdpu = 0;
+        return mask;
 }
 
 static struct file_operations fops = {
@@ -254,13 +262,13 @@ static struct file_operations fops = {
 
 
 static int pvv_init(void)
-{	
+{
 	int rez; int irq_flags;
 	int err; int retp; int irq_pvv3; 
 	int res; 
 	printk(KERN_INFO "MPVV3: START");
 
-	irq_flags = (IORESOURCE_IRQ | IRQF_TRIGGER_FALLING) & IRQF_TRIGGER_MASK;
+	irq_flags = (IORESOURCE_IRQ | IRQF_TRIGGER_FALLING) & IRQF_TRIGGER_MASK;// -\_
 
 	//выделение номеров устройств динамически
 	/*err = alloc_chrdev_region(&dev_pvv, 0, COUNT_DEVICES, PVV3_CHDEVNAME);
@@ -361,9 +369,9 @@ static int pvv_init(void)
 
 	enable_irq(pvvdev->irq);
 	res = request_irq(pvvdev->irq, pvv_irqhandler,irq_flags|IRQF_SHARED,pvvdev->name, GPIO_PVV3_DEVICE_DESC);
-	
+
 	printk(KERN_INFO "------------------------4-----------------------");
-	
+
 	if (res!=0)
     	{
         	printk(KERN_ERR "MPVV3: Unable to claim requested irq: %d",  pvvdev->irq);
