@@ -4,4 +4,4 @@
 
 # Each configuration option enables a list of files.
 
-obj-$(CONFIG_MULTI_EVENT) += mod_event_fops_once.o
+obj-$(CONFIG_KSD_MULTI_EVENT) += mod_event_fops_once.o
