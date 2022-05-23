@@ -8,3 +8,5 @@ smsc911x_russl_correct.c
 
 возможно искать надо в загрузчике (?)
 
+ git config --global http.postBuffer 157286400
+

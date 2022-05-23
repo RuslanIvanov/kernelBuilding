@@ -1,0 +1,16 @@
+menuconfig KSDSERV2
+       bool "KSD SERVER support timer hr"
+
+if KSDSERV2
+
+config KSD_TIMER_DRIVER_HR
+	tristate "Driver hr timer for KSD SERVER" 
+        default y
+        help
+		This is driver for KSD HR TIMER for SERVER (default 350mc). 
+		Say Y here if you have a KSD HR TIMER for SERVER in your system.
+
+		To compile this driver as a module, choose M here: the
+		module will be called psmouse.
+
+endif
